@@ -1,0 +1,20 @@
+{
+  "project": "EFE: Shadow Protocol",
+  "milestone": "018",
+  "scale": "1 unit = 1 meter",
+  "forward": "+Z",
+  "assets": [
+    {
+      "id": "facade_north",
+      "file": "assets/facade_north.glb",
+      "type": "environment",
+      "colliding": false,
+      "notes": "Prototype textured façade. Visual only. Collision remains on the north boundary wall."
+    }
+  ],
+  "budgets": {
+    "prop_tris": 2000,
+    "building_tris": 5000,
+    "texture_max": 512
+  }
+}
