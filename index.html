@@ -1,0 +1,2904 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <title>EFE: Shadow Protocol</title>
+  <!-- Production notes: README.md | assets/manifest.json -->
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    :root {
+      --efe-w: 100vw;
+      --efe-h: 100vh;
+    }
+    html, body {
+      overflow: hidden;
+      background: #0a0a0f;
+      touch-action: none;
+      position: fixed;
+      top: 0; left: 0;
+      width: var(--efe-w);
+      height: var(--efe-h);
+      -webkit-user-select: none; user-select: none;
+      -webkit-touch-callout: none;
+      margin: 0; padding: 0;
+    }
+    /* Full-screen game shell — sized from JS-updated CSS variables */
+    #gameShell {
+      position: fixed;
+      top: 0; left: 0;
+      width: var(--efe-w);
+      height: var(--efe-h);
+      overflow: hidden;
+      z-index: 0;
+    }
+    #renderCanvas {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      outline: none;
+      touch-action: none;
+      z-index: 0;
+      transform: none !important;
+    }
+    #ui {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      color: #e0e0e0;
+      user-select: none;
+      padding-top: env(safe-area-inset-top, 0px);
+      padding-right: env(safe-area-inset-right, 0px);
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+      padding-left: env(safe-area-inset-left, 0px);
+      z-index: 1;
+      box-sizing: border-box;
+    }
+    /* Joystick zones — percentages of the live game shell */
+    #moveZone {
+      position: absolute;
+      bottom: 0; left: 0;
+      width: 42%;
+      height: 55%;
+      pointer-events: auto;
+      z-index: 2;
+    }
+    #aimZone {
+      position: absolute;
+      bottom: 0; right: 0;
+      width: 42%;
+      height: 55%;
+      pointer-events: auto;
+      z-index: 2;
+    }
+    /* Wide viewport = landscape layout (dimension-based, not only orientation media) */
+    body.efe-landscape #moveZone { width: 36%; height: 75%; }
+    body.efe-landscape #aimZone { width: 36%; height: 75%; }
+    body.efe-landscape #healthBar,
+    body.efe-landscape #healthText { width: min(140px, 22vw); }
+    body.efe-landscape #scanBtn { width: 54px; height: 54px; }
+    body.efe-portrait #moveZone { width: 48%; height: 42%; }
+    body.efe-portrait #aimZone { width: 48%; height: 42%; }
+    #healthBar {
+      position: absolute;
+      top: calc(10px + env(safe-area-inset-top, 0px));
+      left: calc(12px + env(safe-area-inset-left, 0px));
+      width: min(160px, 28vw); height: 16px;
+      background: rgba(20,20,30,0.85); border: 1px solid #333; border-radius: 4px; overflow: hidden;
+      z-index: 6;
+    }
+    #healthFill {
+      height: 100%; width: 100%; background: linear-gradient(90deg, #c0392b, #e74c3c);
+      transition: width 0.2s ease;
+    }
+    #healthText {
+      position: absolute;
+      top: calc(10px + env(safe-area-inset-top, 0px));
+      left: calc(12px + env(safe-area-inset-left, 0px));
+      width: min(160px, 28vw); height: 16px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px; font-weight: 600; letter-spacing: 0.5px; text-shadow: 0 1px 2px #000;
+      z-index: 7;
+    }
+    #missionHud {
+      position: absolute;
+      top: calc(8px + env(safe-area-inset-top, 0px));
+      left: 50%; transform: translateX(-50%);
+      background: rgba(12,16,28,0.9); border: 1px solid #3a4555; border-radius: 6px;
+      padding: 5px 12px 6px; z-index: 6; text-align: center;
+      min-width: 160px; max-width: 70vw;
+    }
+    #missionHud .missionTitle {
+      font-size: 10px; font-weight: 700; letter-spacing: 1.2px; color: #8ab4f8;
+      margin-bottom: 3px;
+    }
+    #missionHud .missionLine {
+      font-size: 10px; font-weight: 600; letter-spacing: 0.6px;
+      color: #e8c0a0; line-height: 1.35; white-space: nowrap;
+    }
+    #missionHud .missionLine.cleared { color: #8f8; }
+    #missionHud.complete {
+      border-color: #3a6a3a;
+    }
+    #missionHud.complete .missionTitle { color: #8f8; }
+    body.efe-landscape #missionHud { padding: 4px 10px; }
+    body.efe-landscape #missionHud .missionTitle { font-size: 9px; }
+    body.efe-landscape #missionHud .missionLine { font-size: 9px; }
+    #ammo {
+      position: absolute;
+      bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+      left: 50%; transform: translateX(-50%);
+      font-size: 12px; font-weight: 600; background: rgba(20,20,30,0.8);
+      padding: 4px 12px; border-radius: 6px; border: 1px solid #333; letter-spacing: 1px;
+      z-index: 5;
+    }
+    #msg {
+      position: absolute; top: 42%; left: 50%; transform: translate(-50%, -50%);
+      font-size: clamp(16px, 4.5vw, 24px); font-weight: 700; text-align: center;
+      text-shadow: 0 2px 8px #000; opacity: 0; transition: opacity 0.3s; pointer-events: none;
+      z-index: 20; max-width: 90%; line-height: 1.35;
+    }
+    #msg.show { opacity: 1; }
+    .joyBase {
+      position: absolute; width: 120px; height: 120px; border-radius: 50%;
+      background: rgba(30,40,60,0.4); border: 2px solid rgba(100,140,200,0.35);
+      display: none; pointer-events: none;
+    }
+    .joyKnob {
+      position: absolute; width: 54px; height: 54px; border-radius: 50%;
+      top: 33px; left: 33px; pointer-events: none;
+    }
+    #moveBase { border-color: rgba(100,160,255,0.4); }
+    #moveKnob {
+      background: rgba(100,160,255,0.6); border: 2px solid rgba(150,200,255,0.8);
+    }
+    #aimBase { border-color: rgba(255,140,80,0.45); }
+    #aimKnob {
+      background: rgba(255,140,80,0.65); border: 2px solid rgba(255,180,120,0.85);
+    }
+    #title {
+      position: absolute;
+      top: calc(8px + env(safe-area-inset-top, 0px));
+      right: calc(12px + env(safe-area-inset-right, 0px));
+      font-size: 11px; font-weight: 600;
+      letter-spacing: 1.2px; color: #8ab4f8; opacity: 0.75; z-index: 5;
+    }
+    #crosshair {
+      position: absolute; top: 50%; left: 50%; width: 28px; height: 28px;
+      transform: translate(-50%, -50%); pointer-events: none; opacity: 0.85; z-index: 5;
+    }
+    #crosshair .ch-h, #crosshair .ch-v {
+      position: absolute; background: #7ec8ff;
+      box-shadow: 0 0 4px rgba(100,200,255,0.8);
+    }
+    #crosshair .ch-h { width: 28px; height: 2px; top: 13px; left: 0; }
+    #crosshair .ch-v { width: 2px; height: 28px; left: 13px; top: 0; }
+    #crosshair .ch-dot {
+      position: absolute; width: 4px; height: 4px; border-radius: 50%;
+      background: #fff; top: 12px; left: 12px;
+      box-shadow: 0 0 6px #7ec8ff;
+    }
+    #aimHint {
+      position: absolute;
+      bottom: calc(100px + env(safe-area-inset-bottom, 0px));
+      right: calc(16px + env(safe-area-inset-right, 0px));
+      font-size: 9px; color: rgba(255,180,120,0.5); letter-spacing: 0.5px;
+      pointer-events: none; z-index: 5;
+    }
+    /* FIRE button — Mode B only; clear of SCAN and aim stick */
+    #fireBtn {
+      position: absolute;
+      bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+      right: calc(92px + env(safe-area-inset-right, 0px));
+      width: 72px; height: 72px;
+      border-radius: 50%;
+      background: rgba(90, 18, 18, 0.95);
+      border: 3px solid #ff3b3b;
+      display: none;
+      align-items: center; justify-content: center; flex-direction: column;
+      pointer-events: auto; cursor: pointer;
+      transition: transform 0.08s, background 0.08s, box-shadow 0.08s;
+      box-shadow: 0 0 16px rgba(255, 50, 50, 0.55);
+      z-index: 30; touch-action: none; user-select: none;
+    }
+    #fireBtn.visible { display: flex; }
+    #fireBtn.pressed, #fireBtn:active {
+      background: rgba(200, 30, 30, 0.98);
+      transform: scale(0.92);
+    }
+    #fireIcon { font-size: 18px; line-height: 1; pointer-events: none; }
+    #fireLabel {
+      font-size: 9px; margin-top: 2px; letter-spacing: 1px;
+      color: #ffc8c0; font-weight: 700; pointer-events: none;
+    }
+    #scanBtn {
+      position: absolute;
+      bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+      right: calc(12px + env(safe-area-inset-right, 0px));
+      width: 60px; height: 60px;
+      border-radius: 50%; background: rgba(20,30,50,0.9); border: 2px solid #3a7bd5;
+      display: flex; align-items: center; justify-content: center; flex-direction: column;
+      pointer-events: auto; cursor: pointer; transition: all 0.15s;
+      box-shadow: 0 0 12px rgba(58,123,213,0.4);
+      z-index: 30; touch-action: none;
+    }
+    #scanBtn:active, #scanBtn.active { background: rgba(58,123,213,0.5); transform: scale(0.94); }
+    #scanBtn.cooldown { border-color: #555; box-shadow: none; opacity: 0.6; }
+    #scanIcon { font-size: 18px; line-height: 1; pointer-events: none; }
+    #scanLabel { font-size: 8px; margin-top: 2px; letter-spacing: 0.5px; color: #8ab4f8; pointer-events: none; }
+    #modeToggle {
+      position: absolute;
+      top: calc(32px + env(safe-area-inset-top, 0px));
+      right: calc(12px + env(safe-area-inset-right, 0px));
+      pointer-events: auto; cursor: pointer;
+      background: rgba(20,25,40,0.92); border: 1px solid #3a5a80; border-radius: 5px;
+      padding: 5px 8px; font-size: 10px; font-weight: 600; letter-spacing: 0.4px;
+      color: #8ab4f8; z-index: 40; user-select: none; touch-action: none;
+    }
+    #modeToggle:active { background: rgba(40,55,80,0.95); }
+    #modeLabel { font-size: 8px; color: #6a8aaa; margin-top: 1px; }
+    #audioTestBtn {
+      position: absolute;
+      top: calc(72px + env(safe-area-inset-top, 0px));
+      right: calc(12px + env(safe-area-inset-right, 0px));
+      pointer-events: auto; cursor: pointer;
+      background: rgba(40, 80, 40, 0.92); border: 1px solid #4caf50; border-radius: 5px;
+      padding: 5px 8px; font-size: 10px; font-weight: 700; letter-spacing: 0.4px;
+      color: #b8f0b8; z-index: 40; user-select: none; touch-action: none;
+    }
+    #audioTestBtn:active { background: rgba(60, 120, 60, 1); transform: scale(0.96); }
+    #audioStatus {
+      position: absolute;
+      top: calc(104px + env(safe-area-inset-top, 0px));
+      right: calc(12px + env(safe-area-inset-right, 0px));
+      pointer-events: none;
+      background: rgba(10, 12, 20, 0.85); border: 1px solid #333; border-radius: 4px;
+      padding: 3px 7px; font-size: 9px; font-weight: 600; letter-spacing: 0.3px;
+      color: #aaa; z-index: 40; text-align: center;
+    }
+    #audioStatus.running { color: #6f6; border-color: #3a6a3a; }
+    #audioStatus.suspended { color: #fc6; border-color: #6a5a2a; }
+    #audioStatus.unavailable { color: #f66; border-color: #6a2a2a; }
+    /* Replay — shown only when sector is secured */
+    #replayBtn {
+      position: absolute;
+      top: 58%; left: 50%; transform: translate(-50%, 0);
+      display: none; pointer-events: auto; cursor: pointer;
+      background: rgba(20, 40, 70, 0.95); border: 2px solid #4a9eff;
+      border-radius: 8px; padding: 12px 28px;
+      font-size: 14px; font-weight: 700; letter-spacing: 1.5px; color: #c8e0ff;
+      z-index: 25; touch-action: none; user-select: none;
+      box-shadow: 0 0 20px rgba(60, 140, 255, 0.35);
+    }
+    #replayBtn.visible { display: block; }
+    #replayBtn:active { background: rgba(40, 70, 120, 1); transform: translate(-50%, 0) scale(0.96); }
+    /* Soft portrait hint — does NOT cover the full screen or block touches.
+       Game remains playable even if orientation detection is wrong. */
+    #rotateOverlay {
+      display: none;
+      position: fixed;
+      top: calc(8px + env(safe-area-inset-top, 0px));
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 90;
+      background: rgba(6, 8, 14, 0.88);
+      border: 1px solid #3a5a80;
+      border-radius: 8px;
+      flex-direction: column; align-items: center; justify-content: center;
+      pointer-events: none;
+      text-align: center;
+      padding: 10px 16px;
+      font-family: system-ui, -apple-system, sans-serif; color: #c8d4e8;
+      max-width: 90vw;
+    }
+    #rotateOverlay.show { display: flex; }
+    #rotateOverlay .icon { font-size: 22px; margin-bottom: 4px; }
+    #rotateOverlay h2 {
+      font-size: 12px; letter-spacing: 1.5px; margin-bottom: 2px; color: #8ab4f8;
+    }
+    #rotateOverlay p { font-size: 10px; opacity: 0.7; max-width: 220px; line-height: 1.3; }
+    #initError {
+      display: none; position: fixed; bottom: 12px; left: 12px; right: 12px;
+      z-index: 200; background: rgba(80,20,20,0.95); border: 1px solid #c44;
+      color: #fcc; font-size: 11px; padding: 8px 10px; border-radius: 6px;
+      font-family: ui-monospace, monospace; pointer-events: none;
+      max-height: 30vh; overflow: auto; white-space: pre-wrap;
+    }
+    #initError.show { display: block; }
+  </style>
+</head>
+<body>
+  <div id="gameShell">
+  <canvas id="renderCanvas"></canvas>
+  <div id="ui">
+    <div id="title">EFE: SHADOW PROTOCOL</div>
+    <div id="missionHud">
+      <div class="missionTitle">MISSION: FIRST SIGNAL</div>
+      <div class="missionLine" id="camerasLine">CAMERAS ONLINE: <span id="camerasCount">3</span></div>
+      <div class="missionLine" id="hostilesLine">HOSTILES REMAINING: <span id="hostilesCount">3</span></div>
+    </div>
+    <div id="modeToggle">
+      <div>MODE <span id="modeName">A</span></div>
+      <div id="modeLabel">Twin-Stick Fire</div>
+    </div>
+    <div id="audioTestBtn">TEST SOUND</div>
+    <div id="audioStatus">AUDIO: —</div>
+    <div id="healthBar"><div id="healthFill"></div></div>
+    <div id="healthText">100</div>
+    <div id="ammo">∞</div>
+    <div id="moveZone">
+      <div id="moveBase" class="joyBase"><div id="moveKnob" class="joyKnob"></div></div>
+    </div>
+    <div id="aimZone">
+      <div id="aimBase" class="joyBase"><div id="aimKnob" class="joyKnob"></div></div>
+    </div>
+    <div id="fireBtn">
+      <div id="fireIcon">🔥</div>
+      <div id="fireLabel">FIRE</div>
+    </div>
+    <div id="scanBtn">
+      <div id="scanIcon">📡</div>
+      <div id="scanLabel">SCAN</div>
+    </div>
+    <div id="aimHint">AIM / FIRE</div>
+    <div id="crosshair">
+      <div class="ch-h"></div><div class="ch-v"></div><div class="ch-dot"></div>
+    </div>
+    <div id="msg"></div>
+    <div id="replayBtn">REPLAY</div>
+  </div>
+  </div><!-- /gameShell -->
+  <div id="rotateOverlay">
+    <div class="icon">📱</div>
+    <h2 id="orientTitle">LANDSCAPE RECOMMENDED</h2>
+    <p id="orientMsg">Turn your phone sideways for the best controls. Gameplay works in portrait too.</p>
+  </div>
+  <div id="initError"></div>
+
+  <script src="https://cdn.babylonjs.com/babylon.js"></script>
+  <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+  <script>
+  (function() {
+    const canvas = document.getElementById('renderCanvas');
+    let engine, scene;
+    try {
+      // adaptToDeviceRatio helps iOS after rotation; limit DPR for perf
+      engine = new BABYLON.Engine(canvas, true, {
+        preserveDrawingBuffer: false,
+        stencil: true,
+        adaptToDeviceRatio: false,
+        powerPreference: 'default',
+        failIfMajorPerformanceCaveat: false
+      });
+      // hardwareScalingLevel > 1 = lower res. Cap effective DPR at 1.5 for mobile stability.
+      var dpr = window.devicePixelRatio || 1;
+      engine.setHardwareScalingLevel(dpr / Math.min(dpr, 1.5));
+    } catch (err) {
+      const el = document.getElementById('initError');
+      if (el) {
+        el.textContent = 'INIT: WebGL engine failed — ' + (err && err.message ? err.message : err);
+        el.classList.add('show');
+      }
+      throw err;
+    }
+
+    // Critical for iOS Safari: prevent permanent context loss on rotate
+    canvas.addEventListener('webglcontextlost', function (e) {
+      e.preventDefault();
+      console.warn('[EFE] WebGL context lost (often on rotate) — awaiting restore');
+    }, false);
+    canvas.addEventListener('webglcontextrestored', function () {
+      console.warn('[EFE] WebGL context restored — resizing engine');
+      try {
+        if (engine) {
+          engine.resize();
+          // Force a few frames after restore
+          setTimeout(function () { if (engine) engine.resize(); }, 50);
+          setTimeout(function () { if (engine) engine.resize(); }, 200);
+        }
+      } catch (err) {
+        console.error('[EFE] restore resize failed', err);
+      }
+    }, false);
+
+    scene = new BABYLON.Scene(engine);
+    // Warm industrial atmosphere (EFE concept)
+    scene.clearColor = new BABYLON.Color4(0.06, 0.04, 0.03, 1);
+    scene.fogMode = BABYLON.Scene.FOGMODE_EXP2;
+    scene.fogDensity = 0.014;
+    scene.fogColor = new BABYLON.Color3(0.12, 0.06, 0.03);
+
+    // Lights — warm burnt-orange industrial
+    const hemi = new BABYLON.HemisphericLight('hemi', new BABYLON.Vector3(0.15, 1, 0.2), scene);
+    hemi.intensity = 0.42;
+    hemi.diffuse = new BABYLON.Color3(0.85, 0.6, 0.38);
+    hemi.groundColor = new BABYLON.Color3(0.1, 0.06, 0.05);
+    hemi.specular = new BABYLON.Color3(0.25, 0.18, 0.1);
+
+    const dir = new BABYLON.DirectionalLight('dir', new BABYLON.Vector3(-0.35, -0.85, -0.25), scene);
+    dir.position = new BABYLON.Vector3(18, 28, 12);
+    dir.intensity = 0.62;
+    dir.diffuse = new BABYLON.Color3(1.0, 0.5, 0.22);
+    dir.shadowEnabled = true;
+
+    const shadowGen = new BABYLON.ShadowGenerator(512, dir); // lighter for mobile
+    shadowGen.useBlurExponentialShadowMap = true;
+    shadowGen.blurKernel = 12;
+    shadowGen.setDarkness(0.45);
+
+    // Warm industrial point lights (surveillance / furnace glow)
+    const warm1 = new BABYLON.PointLight('warm1', new BABYLON.Vector3(-8, 4, 6), scene);
+    warm1.intensity = 0.45;
+    warm1.diffuse = new BABYLON.Color3(1.0, 0.4, 0.12);
+    warm1.range = 16;
+    const warm2 = new BABYLON.PointLight('warm2', new BABYLON.Vector3(10, 3.5, -8), scene);
+    warm2.intensity = 0.38;
+    warm2.diffuse = new BABYLON.Color3(1.0, 0.38, 0.1);
+    warm2.range = 14;
+    const warm3 = new BABYLON.PointLight('warm3', new BABYLON.Vector3(0, 5, 0), scene);
+    warm3.intensity = 0.22;
+    warm3.diffuse = new BABYLON.Color3(0.9, 0.35, 0.08);
+    warm3.range = 18;
+
+    // Ground
+    const ground = BABYLON.MeshBuilder.CreateGround('ground', { width: 48, height: 48 }, scene);
+    const groundMat = new BABYLON.StandardMaterial('gMat', scene);
+    groundMat.diffuseColor = new BABYLON.Color3(0.14, 0.11, 0.09); // wet concrete
+    groundMat.specularColor = new BABYLON.Color3(0.25, 0.18, 0.1); // orange-tinted reflections
+    groundMat.specularPower = 32;
+    groundMat.emissiveColor = new BABYLON.Color3(0.015, 0.008, 0.004);
+    ground.material = groundMat;
+    ground.receiveShadows = true;
+
+    // Grid lines for tactical feel
+    const gridMat = new BABYLON.StandardMaterial('grid', scene);
+    gridMat.diffuseColor = new BABYLON.Color3(0.18, 0.2, 0.24);
+    gridMat.emissiveColor = new BABYLON.Color3(0.02, 0.03, 0.04);
+    gridMat.alpha = 0.6;
+    for (let i = -20; i <= 20; i += 4) {
+      const lineZ = BABYLON.MeshBuilder.CreateBox('gz'+i, { width: 40, height: 0.02, depth: 0.04 }, scene);
+      lineZ.position = new BABYLON.Vector3(0, 0.02, i);
+      lineZ.material = gridMat;
+      const lineX = BABYLON.MeshBuilder.CreateBox('gx'+i, { width: 0.04, height: 0.02, depth: 40 }, scene);
+      lineX.position = new BABYLON.Vector3(i, 0.02, 0);
+      lineX.material = gridMat;
+    }
+
+    // Materials
+    const wallMat = new BABYLON.StandardMaterial('wall', scene);
+    wallMat.diffuseColor = new BABYLON.Color3(0.24, 0.2, 0.17); // weathered concrete, slightly lighter for readability
+    wallMat.specularColor = new BABYLON.Color3(0.04, 0.03, 0.02);
+    wallMat.emissiveColor = new BABYLON.Color3(0.012, 0.006, 0.004);
+
+    const crateMat = new BABYLON.StandardMaterial('crate', scene);
+    crateMat.diffuseColor = new BABYLON.Color3(0.48, 0.24, 0.12); // brighter rust for cover readability
+    crateMat.specularColor = new BABYLON.Color3(0.1, 0.05, 0.02);
+    crateMat.emissiveColor = new BABYLON.Color3(0.018, 0.006, 0.002);
+
+    const darkMat = new BABYLON.StandardMaterial('dark', scene);
+    darkMat.diffuseColor = new BABYLON.Color3(0.08, 0.08, 0.1);
+    const qrMat = new BABYLON.StandardMaterial('qr', scene);
+    qrMat.diffuseColor = new BABYLON.Color3(0.85, 0.85, 0.82);
+    qrMat.emissiveColor = new BABYLON.Color3(0.15, 0.15, 0.14);
+    qrMat.disableLighting = true;
+
+    const metalMat = new BABYLON.StandardMaterial('metal', scene);
+    metalMat.diffuseColor = new BABYLON.Color3(0.35, 0.18, 0.1); // rusted barrier
+    metalMat.specularColor = new BABYLON.Color3(0.15, 0.08, 0.04);
+    metalMat.specularPower = 16;
+    metalMat.emissiveColor = new BABYLON.Color3(0.01, 0.004, 0.001);
+
+    // Arena walls (outer)
+    function makeWall(x, z, w, d, h = 3.2) {
+      const m = BABYLON.MeshBuilder.CreateBox('w', { width: w, height: h, depth: d }, scene);
+      m.position = new BABYLON.Vector3(x, h/2, z);
+      m.material = wallMat;
+      m.receiveShadows = true;
+      shadowGen.addShadowCaster(m);
+      m.checkCollisions = true;
+      return m;
+    }
+    // Outer boundary
+    makeWall(0, -22, 44, 1.2);
+    makeWall(0, 22, 44, 1.2);
+    makeWall(-22, 0, 1.2, 44);
+    makeWall(22, 0, 1.2, 44);
+
+    // === MILESTONE 017: textured GLB façade (visual only) ===
+    // Embedded so Safari does not need an external asset request.
+    const facadeGlb = "data:model/gltf-binary;base64,Z2xURgIAAAB8BgAAxAMAAEpTT057ImFzc2V0Ijp7InZlcnNpb24iOiIyLjAiLCJnZW5lcmF0b3IiOiJlZmUtYXNzZXQtcHJvdG8ifSwic2NlbmUiOjAsInNjZW5lcyI6W3sibm9kZXMiOlswXX1dLCJub2RlcyI6W3sibWVzaCI6MCwibmFtZSI6InJ1aW5lZF9mYWNhZGUifV0sIm1lc2hlcyI6W3sicHJpbWl0aXZlcyI6W3siYXR0cmlidXRlcyI6eyJQT1NJVElPTiI6MSwiVEVYQ09PUkRfMCI6Mn0sImluZGljZXMiOjAsIm1hdGVyaWFsIjowfV19XSwibWF0ZXJpYWxzIjpbeyJuYW1lIjoiY29uY3JldGUiLCJwYnJNZXRhbGxpY1JvdWdobmVzcyI6eyJiYXNlQ29sb3JUZXh0dXJlIjp7ImluZGV4IjowfSwibWV0YWxsaWNGYWN0b3IiOjAuMDUsInJvdWdobmVzc0ZhY3RvciI6MC45fX1dLCJ0ZXh0dXJlcyI6W3sic291cmNlIjowfV0sImltYWdlcyI6W3siYnVmZmVyVmlldyI6MywibWltZVR5cGUiOiJpbWFnZS9wbmcifV0sImJ1ZmZlclZpZXdzIjpbeyJidWZmZXIiOjAsImJ5dGVPZmZzZXQiOjAsImJ5dGVMZW5ndGgiOjc4LCJ0YXJnZXQiOjM0OTYzfSx7ImJ1ZmZlciI6MCwiYnl0ZU9mZnNldCI6ODAsImJ5dGVMZW5ndGgiOjIyOCwidGFyZ2V0IjozNDk2Mn0seyJidWZmZXIiOjAsImJ5dGVPZmZzZXQiOjMwOCwiYnl0ZUxlbmd0aCI6MTUyLCJ0YXJnZXQiOjM0OTYyfSx7ImJ1ZmZlciI6MCwiYnl0ZU9mZnNldCI6NDYwLCJieXRlTGVuZ3RoIjoyMDZ9XSwiYWNjZXNzb3JzIjpbeyJidWZmZXJWaWV3IjowLCJjb21wb25lbnRUeXBlIjo1MTIzLCJjb3VudCI6MzksInR5cGUiOiJTQ0FMQVIifSx7ImJ1ZmZlclZpZXciOjEsImNvbXBvbmVudFR5cGUiOjUxMjYsImNvdW50IjoxOSwidHlwZSI6IlZFQzMiLCJtYXgiOlszLDMsMC4wOF0sIm1pbiI6Wy0zLDAsLTAuMzVdfSx7ImJ1ZmZlclZpZXciOjIsImNvbXBvbmVudFR5cGUiOjUxMjYsImNvdW50IjoxOSwidHlwZSI6IlZFQzIifV0sImJ1ZmZlcnMiOlt7ImJ5dGVMZW5ndGgiOjY2OH1dfQAAnAIAAEJJTgAAAAEAAgAAAAIAAwAEAAYABQAHAAgACQAHAAkACgALAAwADQALAA0ADgAPAAAAAwAPAAMAEgABABAAEQABABEAAgADAAIAEQADABEAEgAAAAAAQMAAAAAAAAAAAAAAQEAAAAAAAAAAAAAAQEBmZiZAAAAAAAAAQMBmZiZAAAAAAJqZmT9mZiZAAAAAAAAAQEAAAEBAzcxMPQAAQEBmZiZAAAAAAM3MDMDNzIw/CtejPZqZGb/NzIw/CtejPZqZGb9mZgZACtejPc3MDMBmZgZACtejPc3MzD4AAIA/CtejPWZm5j8AAIA/CtejPWZm5j8AAABACtejPc3MzD4AAABACtejPQAAQMAAAAAAMzOzvgAAQEAAAAAAMzOzvgAAQEBmZiZAMzOzvgAAQMBmZiZAMzOzvgAAAAAAAAAAAACAPwAAAAAAAIA/AACAPwAAAAAAAIA/MzMzP5qZWT8AAIA/AACAPwAAgD+amVk/mpkZPjMzsz7NzMw+MzOzPs3MzD4zMzM/mpkZPjMzMz/NzAw/CtejPhSuRz8K16M+FK5HP2ZmJj/NzAw/ZmYmPwAAAAAAAAAAAACAPwAAAAAAAIA/AACAPwAAAAAAAIA/iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAlUlEQVR42u3XQQpAQBiG4TmBrGThDFaysLB0MCenLFFqBiNPfevJs/jfEqaxT7umrrYlf/lwAeDUAADwd8AzBhWSUQAAGVUhAEcM8A5gHpvryzGjmQKuVwjADQAAyKiMugEAgA9n1D8xgH9iAAAZBXADAAAyKqNxgKFrk68sinV3vLwfAEC+gGcM4dNfD+CIAQBkNHYLzwkYyPRjXCIAAAAASUVORK5CYIIAAA==";
+    BABYLON.SceneLoader.ImportMeshAsync("", "", facadeGlb, scene).then(function (result) {
+      const mesh = result.meshes[0];
+      if (!mesh) return;
+      mesh.position = new BABYLON.Vector3(4, 0, 20.4);
+      mesh.scaling = new BABYLON.Vector3(1.15, 1, 1);
+      mesh.isPickable = false;
+      mesh.checkCollisions = false;
+      mesh.getChildMeshes().forEach(function (c) {
+        c.isPickable = false;
+        c.checkCollisions = false;
+      });
+    }).catch(function (err) {
+      console.warn("[EFE] facade GLB failed", err);
+    });
+
+    // === MODULAR RUINED FAÇADE (north outer wall, non-colliding) ===
+    // Parent node so the whole module can be removed by disabling one root.
+    const facadeRoot = new BABYLON.TransformNode('facadeRoot', scene);
+    facadeRoot.position = new BABYLON.Vector3(4, 0, 20.6);
+
+    // Main concrete slab
+    const fWall = BABYLON.MeshBuilder.CreateBox('fWall', { width: 8, height: 3.4, depth: 0.35 }, scene);
+    fWall.parent = facadeRoot;
+    fWall.position.y = 1.7;
+    fWall.material = wallMat;
+
+    // Rusted metal frame strips
+    const fFrameL = BABYLON.MeshBuilder.CreateBox('fFrameL', { width: 0.12, height: 3.2, depth: 0.08 }, scene);
+    fFrameL.parent = facadeRoot;
+    fFrameL.position = new BABYLON.Vector3(-3.8, 1.6, 0.2);
+    fFrameL.material = metalMat;
+    const fFrameR = BABYLON.MeshBuilder.CreateBox('fFrameR', { width: 0.12, height: 3.2, depth: 0.08 }, scene);
+    fFrameR.parent = facadeRoot;
+    fFrameR.position = new BABYLON.Vector3(3.8, 1.6, 0.2);
+    fFrameR.material = metalMat;
+    const fFrameTop = BABYLON.MeshBuilder.CreateBox('fFrameTop', { width: 7.6, height: 0.12, depth: 0.08 }, scene);
+    fFrameTop.parent = facadeRoot;
+    fFrameTop.position = new BABYLON.Vector3(0, 3.15, 0.2);
+    fFrameTop.material = metalMat;
+
+    // Recessed dark window panels
+    const winMat = new BABYLON.StandardMaterial('fWin', scene);
+    winMat.diffuseColor = new BABYLON.Color3(0.06, 0.05, 0.04);
+    winMat.emissiveColor = new BABYLON.Color3(0.04, 0.02, 0.01);
+    const fWin1 = BABYLON.MeshBuilder.CreateBox('fWin1', { width: 1.4, height: 1.1, depth: 0.06 }, scene);
+    fWin1.parent = facadeRoot;
+    fWin1.position = new BABYLON.Vector3(-2.2, 1.8, 0.18);
+    fWin1.material = winMat;
+    const fWin2 = BABYLON.MeshBuilder.CreateBox('fWin2', { width: 1.4, height: 1.1, depth: 0.06 }, scene);
+    fWin2.parent = facadeRoot;
+    fWin2.position = new BABYLON.Vector3(0.4, 1.8, 0.18);
+    fWin2.material = winMat;
+    const fWin3 = BABYLON.MeshBuilder.CreateBox('fWin3', { width: 1.2, height: 0.9, depth: 0.06 }, scene);
+    fWin3.parent = facadeRoot;
+    fWin3.position = new BABYLON.Vector3(2.6, 1.6, 0.18);
+    fWin3.material = winMat;
+
+    // Warm-orange window glow (emissive, no new light)
+    const glowMat = new BABYLON.StandardMaterial('fGlow', scene);
+    glowMat.emissiveColor = new BABYLON.Color3(0.7, 0.32, 0.08);
+    glowMat.disableLighting = true;
+    const fGlow = BABYLON.MeshBuilder.CreateBox('fGlow', { width: 0.6, height: 0.4, depth: 0.02 }, scene);
+    fGlow.parent = facadeRoot;
+    fGlow.position = new BABYLON.Vector3(-2.2, 1.7, 0.22);
+    fGlow.material = glowMat;
+
+    // Damaged architectural edge (offset slab)
+    const fEdge = BABYLON.MeshBuilder.CreateBox('fEdge', { width: 1.6, height: 0.6, depth: 0.25 }, scene);
+    fEdge.parent = facadeRoot;
+    fEdge.position = new BABYLON.Vector3(3.2, 3.0, 0.1);
+    fEdge.rotation.z = 0.15;
+    fEdge.material = wallMat;
+
+    // Restrained EFE eye mark
+    const fEye = BABYLON.MeshBuilder.CreateSphere('fEye', { diameter: 0.35, segments: 6 }, scene);
+    fEye.parent = facadeRoot;
+    fEye.position = new BABYLON.Vector3(-3.2, 2.6, 0.22);
+    fEye.scaling.z = 0.3;
+    const fEyeMat = new BABYLON.StandardMaterial('fEyeM', scene);
+    fEyeMat.emissiveColor = new BABYLON.Color3(0.9, 0.3, 0.05);
+    fEyeMat.disableLighting = true;
+    fEye.material = fEyeMat;
+
+    // === END FAÇADE ===
+
+    // Inner cover walls
+    // Southwest cover wall — same geometry, textured material only
+    const swWall = makeWall(-8, -6, 8, 1);
+    // Lightweight DynamicTexture: cracks + rust stains (no extra meshes)
+    const swTex = new BABYLON.DynamicTexture('swWear', { width: 128, height: 128 }, scene, false);
+    const ctx = swTex.getContext();
+    ctx.fillStyle = '#3d342c';
+    ctx.fillRect(0, 0, 128, 128);
+    // Vertical cracks
+    ctx.strokeStyle = '#1a1614';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(32, 8); ctx.lineTo(36, 40); ctx.lineTo(30, 78); ctx.lineTo(34, 120);
+    ctx.moveTo(78, 12); ctx.lineTo(74, 50); ctx.lineTo(80, 96);
+    ctx.stroke();
+    // Rust patches
+    ctx.fillStyle = 'rgba(120, 55, 22, 0.55)';
+    ctx.fillRect(48, 60, 28, 18);
+    ctx.fillRect(90, 20, 22, 14);
+    ctx.fillStyle = 'rgba(80, 40, 18, 0.4)';
+    ctx.fillRect(10, 90, 24, 16);
+    swTex.update();
+    const swMat = new BABYLON.StandardMaterial('swWallMat', scene);
+    swMat.diffuseTexture = swTex;
+    swMat.specularColor = new BABYLON.Color3(0.04, 0.03, 0.02);
+    swMat.emissiveColor = new BABYLON.Color3(0.012, 0.006, 0.004);
+    swWall.material = swMat;
+    makeWall(6, 8, 1, 10);
+    makeWall(-4, 10, 6, 1);
+    makeWall(10, -4, 1, 7);
+    makeWall(-12, 4, 1, 6);
+    makeWall(4, -12, 9, 1);
+
+    // Crates as cover
+    function makeCrate(x, z, s = 1.4) {
+      const c = BABYLON.MeshBuilder.CreateBox('crate', { size: s }, scene);
+      c.position = new BABYLON.Vector3(x, s/2, z);
+      c.material = crateMat;
+      c.receiveShadows = true;
+      shadowGen.addShadowCaster(c);
+      c.checkCollisions = true;
+      return c;
+    }
+    const cratePositions = [
+      [-6, -10], [-3, -9], [8, 4], [9, 6], [-10, 8], [-9, 10],
+      [3, -6], [-2, 3], [12, -10], [-14, -4], [5, 12], [-7, 0]
+    ];
+    cratePositions.forEach(([x,z]) => makeCrate(x, z));
+
+    // Some taller barriers
+    function makeBarrier(x, z, rot = 0) {
+      const b = BABYLON.MeshBuilder.CreateBox('bar', { width: 2.8, height: 1.1, depth: 0.5 }, scene);
+      b.position = new BABYLON.Vector3(x, 0.55, z);
+      b.rotation.y = rot;
+      b.material = metalMat;
+      shadowGen.addShadowCaster(b);
+      b.checkCollisions = true;
+      return b;
+    }
+    makeBarrier(0, 0, 0.4);
+    makeBarrier(-5, 5, -0.6);
+    makeBarrier(7, -8, 1.1);
+    makeBarrier(-11, -8, 0.2);
+
+    // === PASS C: Environmental storytelling (non-colliding decorative) ===
+    // Eye-symbol propaganda (simple geometric)
+    function makeEyeMark(x, y, z, rotY) {
+      const eye = BABYLON.MeshBuilder.CreateSphere('eye', { diameter: 0.6, segments: 8 }, scene);
+      eye.position = new BABYLON.Vector3(x, y, z);
+      eye.scaling.z = 0.3;
+      eye.rotation.y = rotY || 0;
+      const eyeMat = new BABYLON.StandardMaterial('eyeM', scene);
+      eyeMat.diffuseColor = new BABYLON.Color3(0.18, 0.1, 0.08);
+      eyeMat.emissiveColor = new BABYLON.Color3(0.45, 0.16, 0.06);
+      eye.material = eyeMat;
+      const pupil = BABYLON.MeshBuilder.CreateSphere('pupil', { diameter: 0.22, segments: 6 }, scene);
+      pupil.parent = eye;
+      pupil.position.z = 0.12;
+      const pMat = new BABYLON.StandardMaterial('pEye', scene);
+      pMat.diffuseColor = new BABYLON.Color3(0.8, 0.25, 0.05);
+      pMat.emissiveColor = new BABYLON.Color3(1.0, 0.3, 0.05);
+      pMat.disableLighting = true;
+      pupil.material = pMat;
+      return eye;
+    }
+    makeEyeMark(-10, 2.2, -6, 0.3);
+    makeEyeMark(8, 2.0, 6, -0.5);
+
+    // Distressed warning sign
+    function makeSign(x, y, z, rotY) {
+      const s = BABYLON.MeshBuilder.CreateBox('sign', { width: 1.2, height: 0.5, depth: 0.04 }, scene);
+      s.position = new BABYLON.Vector3(x, y, z);
+      s.rotation.y = rotY || 0;
+      const sMat = new BABYLON.StandardMaterial('sMat', scene);
+      sMat.diffuseColor = new BABYLON.Color3(0.52, 0.15, 0.08);
+      sMat.emissiveColor = new BABYLON.Color3(0.12, 0.035, 0.015);
+      s.material = sMat;
+      return s;
+    }
+    makeSign(4, 1.8, -12, 0.2);
+    makeSign(-12, 1.6, 4, 1.0);
+
+    // Small rubble piles (non-colliding)
+    function makeRubble(x, z) {
+      for (let i = 0; i < 3; i++) {
+        const r = BABYLON.MeshBuilder.CreateBox('rub', { size: 0.25 + Math.random() * 0.2 }, scene);
+        r.position = new BABYLON.Vector3(x + (Math.random()-0.5)*0.6, 0.12, z + (Math.random()-0.5)*0.6);
+        r.rotation.y = Math.random() * 6;
+        r.material = crateMat;
+      }
+    }
+    makeRubble(-4, -2);
+    makeRubble(6, 2);
+    makeRubble(-9, 7);
+
+    // Pipe segments
+    function makePipe(x, y, z, len, rotY) {
+      const pipe = BABYLON.MeshBuilder.CreateCylinder('pipe', { diameter: 0.18, height: len, tessellation: 8 }, scene);
+      pipe.position = new BABYLON.Vector3(x, y, z);
+      pipe.rotation.z = Math.PI / 2;
+      pipe.rotation.y = rotY || 0;
+      pipe.material = metalMat;
+      return pipe;
+    }
+    makePipe(-6, 2.8, 4, 3.5, 0.4);
+    makePipe(9, 2.5, -6, 2.8, -0.3);
+
+    // Cracked pavement patches (non-colliding dark planes)
+    function makeCrack(x, z, w, d, rot) {
+      const c = BABYLON.MeshBuilder.CreateBox('crack', { width: w, height: 0.02, depth: d }, scene);
+      c.position = new BABYLON.Vector3(x, 0.03, z);
+      c.rotation.y = rot || 0;
+      const cMat = new BABYLON.StandardMaterial('crackM', scene);
+      cMat.diffuseColor = new BABYLON.Color3(0.08, 0.06, 0.05);
+      cMat.emissiveColor = new BABYLON.Color3(0.01, 0.005, 0.003);
+      c.material = cMat;
+      return c;
+    }
+    makeCrack(-3, -5, 2.5, 0.15, 0.3);
+    makeCrack(5, 3, 1.8, 0.12, -0.5);
+    makeCrack(-8, 2, 3.0, 0.1, 0.8);
+
+    // Simple puddles (dark translucent planes, non-colliding)
+    function makePuddle(x, z, s) {
+      const p = BABYLON.MeshBuilder.CreateGround('pud', { width: s, height: s * 0.7 }, scene);
+      p.position = new BABYLON.Vector3(x, 0.02, z);
+      const pMat = new BABYLON.StandardMaterial('pudM', scene);
+      pMat.diffuseColor = new BABYLON.Color3(0.06, 0.08, 0.1);
+      pMat.emissiveColor = new BABYLON.Color3(0.02, 0.03, 0.04);
+      pMat.alpha = 0.55;
+      p.material = pMat;
+      return p;
+    }
+    makePuddle(2, -3, 1.4);
+    makePuddle(-6, 5, 1.1);
+
+    // EFE surveillance banners (taller, concept-style with eye + QR motif)
+    function makeBanner(x, y, z, rotY) {
+      const ban = BABYLON.MeshBuilder.CreateBox('ban', { width: 1.4, height: 2.4, depth: 0.04 }, scene);
+      ban.position = new BABYLON.Vector3(x, y, z);
+      ban.rotation.y = rotY || 0;
+      const bMat = new BABYLON.StandardMaterial('bMat', scene);
+      bMat.diffuseColor = new BABYLON.Color3(0.4, 0.14, 0.08);
+      bMat.emissiveColor = new BABYLON.Color3(0.1, 0.03, 0.015);
+      ban.material = bMat;
+      // Eye at top
+      const be = BABYLON.MeshBuilder.CreateSphere('be', { diameter: 0.35, segments: 6 }, scene);
+      be.parent = ban;
+      be.position = new BABYLON.Vector3(0, 0.7, 0.03);
+      be.scaling.z = 0.35;
+      const beMat = new BABYLON.StandardMaterial('beM', scene);
+      beMat.emissiveColor = new BABYLON.Color3(0.95, 0.32, 0.05);
+      beMat.disableLighting = true;
+      be.material = beMat;
+      // QR-style grid below
+      const qr = BABYLON.MeshBuilder.CreateBox('bqr', { width: 0.5, height: 0.5, depth: 0.02 }, scene);
+      qr.parent = ban;
+      qr.position = new BABYLON.Vector3(0, -0.3, 0.03);
+      qr.material = qrMat;
+      return ban;
+    }
+    makeBanner(-18, 2.8, 2, 1.57);
+    makeBanner(18, 2.6, -4, -1.57);
+    makeBanner(0, 2.5, 20, 0);
+
+    // Scaffolding / fence segments (non-colliding, background)
+    function makeScaffold(x, z, rotY) {
+      const pole = BABYLON.MeshBuilder.CreateCylinder('sc', { diameter: 0.08, height: 3.2, tessellation: 6 }, scene);
+      pole.position = new BABYLON.Vector3(x, 1.6, z);
+      pole.rotation.y = rotY || 0;
+      pole.material = metalMat;
+      const bar = BABYLON.MeshBuilder.CreateBox('scb', { width: 1.8, height: 0.06, depth: 0.06 }, scene);
+      bar.parent = pole;
+      bar.position.y = 0.6;
+      bar.material = metalMat;
+      return pole;
+    }
+    makeScaffold(-18, 8, 0.2);
+    makeScaffold(16, -10, -0.4);
+
+    // Broken surveillance prop (tilted dead camera shell, non-colliding)
+    function makeBrokenCam(x, z) {
+      const shell = BABYLON.MeshBuilder.CreateBox('bc', { width: 0.35, height: 0.25, depth: 0.4 }, scene);
+      shell.position = new BABYLON.Vector3(x, 0.18, z);
+      shell.rotation.z = 0.4;
+      shell.rotation.y = Math.random() * 3;
+      shell.material = darkMat;
+      return shell;
+    }
+    makeBrokenCam(3, 7);
+    makeBrokenCam(-11, -6);
+
+    // Rusted barrels (concept has stacked barrels as cover accents)
+    function makeBarrel(x, z) {
+      const b = BABYLON.MeshBuilder.CreateCylinder('barrel', { diameter: 0.55, height: 0.9, tessellation: 10 }, scene);
+      b.position = new BABYLON.Vector3(x, 0.45, z);
+      b.material = crateMat;
+      return b;
+    }
+    makeBarrel(7, -6);
+    makeBarrel(7.6, -6.3);
+    makeBarrel(-4, 8);
+
+    // Extra eye marks on taller surfaces
+    makeEyeMark(0, 2.6, 18, 0);
+    makeEyeMark(-16, 2.4, -2, 1.2);
+
+    // Illuminated window accents on outer walls (emissive, non-colliding)
+    function makeWindow(x, y, z, rotY) {
+      const w = BABYLON.MeshBuilder.CreateBox('win', { width: 0.6, height: 0.4, depth: 0.05 }, scene);
+      w.position = new BABYLON.Vector3(x, y, z);
+      w.rotation.y = rotY || 0;
+      const wMat = new BABYLON.StandardMaterial('wMat', scene);
+      wMat.emissiveColor = new BABYLON.Color3(0.7, 0.35, 0.1);
+      wMat.disableLighting = true;
+      w.material = wMat;
+      return w;
+    }
+    makeWindow(-21.3, 2.0, 4, 1.57);
+    makeWindow(21.3, 1.8, -6, -1.57);
+    makeWindow(2, 2.1, -21.3, 0);
+
+    // ========== SURVEILLANCE CAMERAS (mission objectives) ==========
+    const cameras = [];
+    let camerasOnline = 3;
+    const camBodyMat = new BABYLON.StandardMaterial('camBody', scene);
+    camBodyMat.diffuseColor = new BABYLON.Color3(0.12, 0.13, 0.15);
+    camBodyMat.specularColor = new BABYLON.Color3(0.25, 0.25, 0.28);
+    camBodyMat.specularPower = 20;
+    const camLensMat = new BABYLON.StandardMaterial('camLens', scene);
+    camLensMat.diffuseColor = new BABYLON.Color3(0.04, 0.06, 0.1);
+    camLensMat.emissiveColor = new BABYLON.Color3(0.03, 0.08, 0.12);
+    const camLightOnMat = new BABYLON.StandardMaterial('camLiteOn', scene);
+    camLightOnMat.diffuseColor = new BABYLON.Color3(0.8, 0.05, 0.05);
+    camLightOnMat.emissiveColor = new BABYLON.Color3(1.0, 0.08, 0.05);
+    camLightOnMat.disableLighting = true;
+    const camLightOffMat = new BABYLON.StandardMaterial('camLiteOff', scene);
+    camLightOffMat.diffuseColor = new BABYLON.Color3(0.12, 0.05, 0.05);
+    camLightOffMat.emissiveColor = new BABYLON.Color3(0.02, 0.0, 0.0);
+
+    function createCamera(x, y, z, rotY) {
+      const root = new BABYLON.TransformNode('camRoot', scene);
+      root.position = new BABYLON.Vector3(x, y, z);
+      root.rotation.y = rotY || 0;
+
+      // Mount arm
+      const arm = BABYLON.MeshBuilder.CreateBox('camArm', { width: 0.12, height: 0.5, depth: 0.12 }, scene);
+      arm.parent = root;
+      arm.position.y = 0.15;
+      arm.material = camBodyMat;
+
+      // Camera housing
+      const body = BABYLON.MeshBuilder.CreateBox('camBody', { width: 0.45, height: 0.32, depth: 0.55 }, scene);
+      body.parent = root;
+      body.position = new BABYLON.Vector3(0, 0.45, 0.1);
+      body.material = camBodyMat;
+      shadowGen.addShadowCaster(body);
+
+      // Lens
+      const lens = BABYLON.MeshBuilder.CreateCylinder('camLens', {
+        diameter: 0.22, height: 0.12, tessellation: 10
+      }, scene);
+      lens.parent = body;
+      lens.rotation.x = Math.PI / 2;
+      lens.position.z = 0.3;
+      lens.material = camLensMat;
+
+      // Red indicator light
+      const lite = BABYLON.MeshBuilder.CreateSphere('camLite', { diameter: 0.1, segments: 6 }, scene);
+      lite.parent = body;
+      lite.position = new BABYLON.Vector3(0.16, 0.12, 0.22);
+      lite.material = camLightOnMat;
+
+      // Small QR-style marking on the side (surveillance apparel reference)
+      const qrPanel = BABYLON.MeshBuilder.CreateBox('qrPanel', { width: 0.18, height: 0.18, depth: 0.02 }, scene);
+      qrPanel.parent = body;
+      qrPanel.position = new BABYLON.Vector3(-0.24, 0, 0);
+      qrPanel.material = qrMat;
+      // Simple 3x3 grid dots to suggest a QR code
+      for (let qy = -1; qy <= 1; qy++) {
+        for (let qx = -1; qx <= 1; qx++) {
+          if ((qx + qy) % 2 === 0) continue;
+          const dot = BABYLON.MeshBuilder.CreateBox('qd', { size: 0.035 }, scene);
+          dot.parent = qrPanel;
+          dot.position = new BABYLON.Vector3(qx * 0.05, qy * 0.05, 0.012);
+          dot.material = darkMat;
+        }
+      }
+
+      // Invisible hit volume aligned with the visual camera.
+      // Centered on the body but with enough vertical extent that horizontal
+      // shots (which travel at ~y=1.2) can register on elevated cameras.
+      const hitbox = BABYLON.MeshBuilder.CreateSphere('camHit', { diameter: 1.6, segments: 6 }, scene);
+      hitbox.parent = root;
+      hitbox.position = new BABYLON.Vector3(0, 0.45, 0.1); // same as body
+      hitbox.isVisible = false;
+      hitbox.isPickable = false;
+
+      const cam = {
+        root, body, lens, lite, arm, hitbox,
+        hp: 40, maxHp: 40,
+        alive: true,
+        hitFlashTimer: 0
+      };
+      cameras.push(cam);
+      return cam;
+    }
+
+    // Three cameras covering different sectors of the arena
+    createCamera(-14, 2.4, 14, 0.9);
+    createCamera(14, 2.4, 10, -2.2);
+    createCamera(2, 2.6, -16, 0.15);
+
+    // Subtle environmental surveillance graphics (QR-style panels)
+    function makeQrPanel(x, y, z, rotY) {
+      const panel = BABYLON.MeshBuilder.CreateBox('qrEnv', { width: 0.7, height: 0.7, depth: 0.04 }, scene);
+      panel.position = new BABYLON.Vector3(x, y, z);
+      panel.rotation.y = rotY || 0;
+      panel.material = qrMat;
+      // Sparse grid to suggest a QR code without clutter
+      for (let gy = -2; gy <= 2; gy++) {
+        for (let gx = -2; gx <= 2; gx++) {
+          if ((gx * 3 + gy) % 3 === 0) continue;
+          const cell = BABYLON.MeshBuilder.CreateBox('qc', { size: 0.08 }, scene);
+          cell.parent = panel;
+          cell.position = new BABYLON.Vector3(gx * 0.12, gy * 0.12, 0.025);
+          cell.material = darkMat;
+        }
+      }
+      return panel;
+    }
+    // Place a few panels near cover, low enough to be readable on phone
+    makeQrPanel(-8, 1.6, -6, 0.4);
+    makeQrPanel(6, 1.5, 8, -0.6);
+    makeQrPanel(10, 1.4, -4, 1.2);
+
+    // Camera damage / destroy defined later (after FX + materials)
+
+    // Player
+    const playerRoot = new BABYLON.TransformNode('playerRoot', scene);
+    playerRoot.position = new BABYLON.Vector3(0, 0, -14);
+
+    const playerBody = BABYLON.MeshBuilder.CreateCapsule('pBody', { height: 1.7, radius: 0.35 }, scene);
+    playerBody.parent = playerRoot;
+    playerBody.position.y = 0.85;
+    const pMat = new BABYLON.StandardMaterial('pMat', scene);
+    pMat.diffuseColor = new BABYLON.Color3(0.08, 0.08, 0.1);
+    pMat.specularColor = new BABYLON.Color3(0.15, 0.15, 0.18);
+    playerBody.material = pMat;
+    shadowGen.addShadowCaster(playerBody);
+
+    // Head
+    const head = BABYLON.MeshBuilder.CreateSphere('head', { diameter: 0.42 }, scene);
+    head.parent = playerRoot;
+    head.position.y = 1.75;
+    head.material = pMat;
+
+    // Visor
+    const visor = BABYLON.MeshBuilder.CreateBox('visor', { width: 0.38, height: 0.12, depth: 0.15 }, scene);
+    visor.parent = head;
+    visor.position.z = 0.18;
+    const visorMat = new BABYLON.StandardMaterial('visor', scene);
+    visorMat.diffuseColor = new BABYLON.Color3(0.1, 0.4, 0.6);
+    visorMat.emissiveColor = new BABYLON.Color3(0.05, 0.25, 0.4);
+    visor.material = visorMat;
+
+    // Gun
+    const gun = BABYLON.MeshBuilder.CreateBox('gun', { width: 0.12, height: 0.14, depth: 0.55 }, scene);
+    gun.parent = playerRoot;
+    gun.position = new BABYLON.Vector3(0.28, 1.15, 0.35);
+    const gunMat = new BABYLON.StandardMaterial('gun', scene);
+    gunMat.diffuseColor = new BABYLON.Color3(0.12, 0.12, 0.14);
+    gun.material = gunMat;
+
+    // Muzzle flash
+    const muzzle = BABYLON.MeshBuilder.CreateSphere('muzzle', { diameter: 0.18 }, scene);
+    muzzle.parent = gun;
+    muzzle.position.z = 0.32;
+    const muzMat = new BABYLON.StandardMaterial('muz', scene);
+    muzMat.emissiveColor = new BABYLON.Color3(1, 0.7, 0.2);
+    muzMat.disableLighting = true;
+    muzzle.material = muzMat;
+    muzzle.isVisible = false;
+
+    // Camera - fixed isometric / top-down tactical
+    const camera = new BABYLON.UniversalCamera('cam', new BABYLON.Vector3(0, 22, -16), scene);
+    camera.setTarget(new BABYLON.Vector3(0, 0, -6));
+    camera.fov = 0.55;
+    camera.minZ = 0.5;
+    camera.maxZ = 120;
+    camera.inputs.clear(); // no free look
+
+    // Keep camera following player smoothly
+    scene.onBeforeRenderObservable.add(() => {
+      const targetPos = playerRoot.position.add(new BABYLON.Vector3(0, 0, 4));
+      const desired = targetPos.add(new BABYLON.Vector3(0, 20, -14));
+      camera.position = BABYLON.Vector3.Lerp(camera.position, desired, 0.08);
+      camera.setTarget(BABYLON.Vector3.Lerp(camera.getTarget(), targetPos, 0.1));
+    });
+
+    // Player state
+    let playerHP = 100;
+    const maxHP = 100;
+    let playerAlive = true;
+    let moveInput = new BABYLON.Vector2(0, 0);
+    let aimDir = new BABYLON.Vector3(0, 0, 1);
+    let isShooting = false;
+    let shootCooldown = 0;
+    const shootRate = 0.12;
+    let scanActive = false;
+    let scanTimer = 0;
+    let scanCooldown = 0;
+    const SCAN_DURATION = 4;
+    const SCAN_CD = 10;
+
+    // Collision helper
+    const playerRadius = 0.4;
+    function canMoveTo(pos) {
+      // Simple AABB against static obstacles
+      const obstacles = scene.meshes.filter(m => m.checkCollisions && m !== playerBody && m !== head);
+      for (const o of obstacles) {
+        const bb = o.getBoundingInfo().boundingBox;
+        const min = bb.minimumWorld;
+        const max = bb.maximumWorld;
+        // Expand by player radius
+        if (pos.x + playerRadius > min.x && pos.x - playerRadius < max.x &&
+            pos.z + playerRadius > min.z && pos.z - playerRadius < max.z) {
+          // Only block if height overlaps roughly
+          if (max.y > 0.3) return false;
+        }
+      }
+      // Bounds
+      if (Math.abs(pos.x) > 20.5 || Math.abs(pos.z) > 20.5) return false;
+      return true;
+    }
+
+    // ========== AUDIO (iOS-safe Web Audio) ==========
+    // Mobile browsers require AudioContext.resume() inside a real user gesture.
+    // resume() is async — we must wait for it before starting oscillators.
+    let audioCtx = null;
+    let masterGain = null;
+    let audioReady = false;
+    let audioFailReason = '';
+    const audioStatusEl = document.getElementById('audioStatus');
+    const audioTestBtn = document.getElementById('audioTestBtn');
+
+    function setAudioStatus(state, detail) {
+      if (!audioStatusEl) return;
+      audioStatusEl.className = '';
+      if (state === 'running') {
+        audioStatusEl.classList.add('running');
+        audioStatusEl.textContent = 'AUDIO: ON';
+      } else if (state === 'suspended') {
+        audioStatusEl.classList.add('suspended');
+        audioStatusEl.textContent = 'AUDIO: TAP TO ENABLE';
+      } else if (state === 'unavailable') {
+        audioStatusEl.classList.add('unavailable');
+        audioStatusEl.textContent = 'AUDIO: UNAVAILABLE';
+      } else {
+        audioStatusEl.textContent = detail || 'AUDIO: —';
+      }
+    }
+
+    function createAudioContext() {
+      if (audioCtx) return audioCtx;
+      try {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) {
+          audioFailReason = 'No AudioContext API';
+          setAudioStatus('unavailable');
+          return null;
+        }
+        audioCtx = new AC();
+        masterGain = audioCtx.createGain();
+        // Higher master volume for phone speakers
+        masterGain.gain.value = 0.85;
+        masterGain.connect(audioCtx.destination);
+        return audioCtx;
+      } catch (err) {
+        audioFailReason = String(err && err.message ? err.message : err);
+        setAudioStatus('unavailable');
+        return null;
+      }
+    }
+
+    // Must be called from a user gesture (touch/click). Returns a Promise.
+    function unlockAudio() {
+      const ctx = createAudioContext();
+      if (!ctx) return Promise.resolve(false);
+      if (ctx.state === 'running') {
+        audioReady = true;
+        setAudioStatus('running');
+        return Promise.resolve(true);
+      }
+      // iOS Safari: resume() must happen in the gesture stack
+      return ctx.resume().then(() => {
+        if (ctx.state === 'running') {
+          audioReady = true;
+          setAudioStatus('running');
+          return true;
+        }
+        setAudioStatus('suspended');
+        return false;
+      }).catch(err => {
+        audioFailReason = String(err && err.message ? err.message : err);
+        setAudioStatus('suspended');
+        return false;
+      });
+    }
+
+    // Keep status in sync (context can suspend again when tab backgrounds)
+    function refreshAudioStatus() {
+      if (!audioCtx) {
+        setAudioStatus('suspended');
+        return;
+      }
+      if (audioCtx.state === 'running') {
+        audioReady = true;
+        setAudioStatus('running');
+      } else if (audioCtx.state === 'suspended') {
+        audioReady = false;
+        setAudioStatus('suspended');
+      } else {
+        setAudioStatus('unavailable');
+      }
+    }
+    setInterval(refreshAudioStatus, 1500);
+
+    // Unlock on any early interaction (does not auto-play a sound)
+    function gestureUnlock(e) {
+      unlockAudio();
+    }
+    document.addEventListener('touchstart', gestureUnlock, { passive: true, capture: true });
+    document.addEventListener('touchend', gestureUnlock, { passive: true, capture: true });
+    document.addEventListener('mousedown', gestureUnlock, { passive: true, capture: true });
+    document.addEventListener('keydown', gestureUnlock, { passive: true, capture: true });
+
+    // Play a tone only when context is running. Uses linear ramps (more reliable on iOS).
+    function playTone(freq, dur, type, vol, slideTo) {
+      if (!audioCtx || audioCtx.state !== 'running' || !masterGain) return;
+      try {
+        const t0 = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type || 'square';
+        osc.frequency.setValueAtTime(freq, t0);
+        if (slideTo != null) {
+          osc.frequency.linearRampToValueAtTime(Math.max(30, slideTo), t0 + dur);
+        }
+        const peak = Math.min(1, vol != null ? vol : 0.35);
+        gain.gain.setValueAtTime(0.001, t0);
+        gain.gain.linearRampToValueAtTime(peak, t0 + 0.012);
+        gain.gain.linearRampToValueAtTime(0.001, t0 + Math.max(0.03, dur));
+        osc.connect(gain);
+        gain.connect(masterGain);
+        osc.start(t0);
+        osc.stop(t0 + dur + 0.05);
+        // Cleanup nodes after playback
+        osc.onended = () => {
+          try { osc.disconnect(); gain.disconnect(); } catch (e) {}
+        };
+      } catch (err) {
+        // Swallow to avoid spamming console during rapid fire
+      }
+    }
+
+    // Louder, clearer SFX tuned for phone speakers
+    function sfxShoot() {
+      // Kick + click
+      playTone(220, 0.07, 'square', 0.45, 70);
+      playTone(110, 0.05, 'triangle', 0.35, 55);
+    }
+    function sfxHit() {
+      playTone(420, 0.06, 'sawtooth', 0.4, 120);
+      playTone(180, 0.08, 'square', 0.3, 70);
+    }
+    function sfxKill() {
+      playTone(280, 0.14, 'sawtooth', 0.42, 50);
+      playTone(100, 0.2, 'triangle', 0.32, 35);
+    }
+    function sfxImpact() {
+      playTone(150, 0.05, 'triangle', 0.28, 60);
+    }
+    function sfxTest() {
+      // Clearly audible two-tone beep for the TEST SOUND button
+      playTone(660, 0.15, 'sine', 0.55, null);
+      setTimeout(() => playTone(880, 0.18, 'sine', 0.55, null), 160);
+    }
+
+    // TEST SOUND button — unlocks + plays inside the same user gesture
+    function onTestSound(e) {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      unlockAudio().then(ok => {
+        if (ok) {
+          sfxTest();
+          showMsg('TEST SOUND PLAYED', 1.0);
+        } else {
+          showMsg(audioFailReason
+            ? ('AUDIO BLOCKED: ' + audioFailReason)
+            : 'AUDIO BLOCKED — check silent switch / site settings', 2.2);
+          setAudioStatus('suspended');
+        }
+      });
+    }
+    audioTestBtn.addEventListener('touchstart', onTestSound, { passive: false });
+    audioTestBtn.addEventListener('click', onTestSound);
+    setAudioStatus('suspended'); // initial: needs user tap
+
+    // ========== COMBAT FX POOLS (reuse for mobile) ==========
+    const fxPool = [];
+    function spawnFlash(pos, color, scale, life) {
+      let m = fxPool.pop();
+      if (!m) {
+        m = BABYLON.MeshBuilder.CreateSphere('fx', { diameter: 1, segments: 4 }, scene);
+        const mat = new BABYLON.StandardMaterial('fxMat', scene);
+        mat.disableLighting = true;
+        mat.emissiveColor = color.clone();
+        mat.alpha = 0.85;
+        m.material = mat;
+        m.isPickable = false;
+      } else {
+        m.material.emissiveColor.copyFrom(color);
+        m.material.alpha = 0.85;
+        m.setEnabled(true);
+      }
+      m.position.copyFrom(pos);
+      m.scaling.setAll(scale);
+      const entry = { mesh: m, life: life || 0.12, maxLife: life || 0.12, baseScale: scale };
+      activeFx.push(entry);
+    }
+    const activeFx = [];
+
+    function spawnSparks(pos, count) {
+      for (let i = 0; i < count; i++) {
+        const dir = new BABYLON.Vector3(
+          (Math.random() - 0.5) * 2,
+          Math.random() * 1.2,
+          (Math.random() - 0.5) * 2
+        ).normalize();
+        const m = BABYLON.MeshBuilder.CreateSphere('spk', { diameter: 0.08, segments: 3 }, scene);
+        const mat = new BABYLON.StandardMaterial('spkM', scene);
+        mat.disableLighting = true;
+        mat.emissiveColor = new BABYLON.Color3(1, 0.7 + Math.random() * 0.3, 0.2);
+        m.material = mat;
+        m.position.copyFrom(pos);
+        m.isPickable = false;
+        activeFx.push({
+          mesh: m, life: 0.18 + Math.random() * 0.12, maxLife: 0.25,
+          baseScale: 0.08, vel: dir.scale(4 + Math.random() * 5), isSpark: true
+        });
+      }
+    }
+
+    function updateFx(dt) {
+      for (let i = activeFx.length - 1; i >= 0; i--) {
+        const f = activeFx[i];
+        f.life -= dt;
+        if (f.vel) {
+          f.mesh.position.addInPlace(f.vel.scale(dt));
+          f.vel.y -= 8 * dt;
+          f.vel.scaleInPlace(0.92);
+        }
+        const t = Math.max(0, f.life / f.maxLife);
+        f.mesh.material.alpha = t * 0.9;
+        const s = f.baseScale * (0.6 + t * 0.8);
+        f.mesh.scaling.setAll(s);
+        if (f.life <= 0) {
+          if (f.isSpark) {
+            f.mesh.material.dispose();
+            f.mesh.dispose();
+          } else {
+            f.mesh.setEnabled(false);
+            fxPool.push(f.mesh);
+          }
+          activeFx.splice(i, 1);
+        }
+      }
+    }
+
+    // Player weapon recoil state
+    let gunRecoil = 0;
+    const gunBasePos = gun.position.clone();
+
+    // Bullets
+    const bullets = [];
+    function fireBullet(from, dir, isPlayer) {
+      const b = BABYLON.MeshBuilder.CreateSphere('b', { diameter: 0.12 }, scene);
+      b.position.copyFrom(from);
+      const mat = new BABYLON.StandardMaterial('bmat', scene);
+      mat.emissiveColor = isPlayer ? new BABYLON.Color3(0.3, 0.8, 1) : new BABYLON.Color3(1, 0.3, 0.2);
+      mat.disableLighting = true;
+      b.material = mat;
+      const speed = isPlayer ? 28 : 18;
+      bullets.push({ mesh: b, vel: dir.scale(speed), life: 1.2, isPlayer, dir: dir.clone() });
+    }
+
+    // Enemies
+    const enemies = [];
+    const enemyMat = new BABYLON.StandardMaterial('eMat', scene);
+    // Near-black tactical armor (Enforcer reference)
+    enemyMat.diffuseColor = new BABYLON.Color3(0.07, 0.07, 0.08);
+    enemyMat.specularColor = new BABYLON.Color3(0.12, 0.12, 0.14);
+    enemyMat.specularPower = 24;
+
+    const goggleMat = new BABYLON.StandardMaterial('goggle', scene);
+    goggleMat.diffuseColor = new BABYLON.Color3(0.9, 0.28, 0.04);
+    goggleMat.emissiveColor = new BABYLON.Color3(1.0, 0.32, 0.04);
+    goggleMat.disableLighting = true;
+
+    const vestMat = new BABYLON.StandardMaterial('vest', scene);
+    vestMat.diffuseColor = new BABYLON.Color3(0.11, 0.11, 0.12);
+    vestMat.specularColor = new BABYLON.Color3(0.18, 0.18, 0.2);
+
+    const hitFlashMat = new BABYLON.StandardMaterial('hitFlash', scene);
+    hitFlashMat.diffuseColor = new BABYLON.Color3(1, 0.9, 0.7);
+    hitFlashMat.emissiveColor = new BABYLON.Color3(1, 0.5, 0.2);
+    hitFlashMat.specularColor = new BABYLON.Color3(0, 0, 0);
+
+    const highlightMat = new BABYLON.StandardMaterial('hl', scene);
+    highlightMat.diffuseColor = new BABYLON.Color3(0.2, 0.6, 1);
+    highlightMat.emissiveColor = new BABYLON.Color3(0.1, 0.4, 0.8);
+
+    const deadMat = new BABYLON.StandardMaterial('deadMat', scene);
+    deadMat.diffuseColor = new BABYLON.Color3(0.2, 0.12, 0.1);
+    deadMat.emissiveColor = new BABYLON.Color3(0.05, 0.02, 0.02);
+    deadMat.alpha = 1;
+
+    // ========== COVER POINTS (from existing crates, barriers, inner walls) ==========
+    // Stand positions adjacent to solid props — enemies use these when under fire.
+    const COVER_SPOTS = [];
+    function addCoverAround(cx, cz, radius) {
+      const offsets = [
+        [radius, 0], [-radius, 0], [0, radius], [0, -radius],
+        [radius * 0.7, radius * 0.7], [-radius * 0.7, radius * 0.7],
+        [radius * 0.7, -radius * 0.7], [-radius * 0.7, -radius * 0.7]
+      ];
+      offsets.forEach(([ox, oz]) => {
+        const p = new BABYLON.Vector3(cx + ox, 0, cz + oz);
+        // Only keep standable spots inside the arena
+        if (Math.abs(p.x) < 19 && Math.abs(p.z) < 19 && canMoveTo(p)) {
+          COVER_SPOTS.push({ pos: p, anchor: new BABYLON.Vector3(cx, 0, cz) });
+        }
+      });
+    }
+    // Crates
+    cratePositions.forEach(([x, z]) => addCoverAround(x, z, 1.55));
+    // Barriers
+    [[0, 0], [-5, 5], [7, -8], [-11, -8]].forEach(([x, z]) => addCoverAround(x, z, 1.9));
+    // Inner wall midpoints (stand beside them)
+    [[-8, -6], [6, 8], [-4, 10], [10, -4], [-12, 4], [4, -12]].forEach(([x, z]) => {
+      addCoverAround(x, z, 1.7);
+    });
+
+    // Rough LOS / blockage sample between two ground points
+    function lineBlocked(a, b, samples) {
+      const n = samples || 4;
+      for (let i = 1; i < n; i++) {
+        const t = i / n;
+        const p = BABYLON.Vector3.Lerp(a, b, t);
+        p.y = 0;
+        if (!canMoveTo(p)) return true;
+      }
+      return false;
+    }
+
+    // Is this cover spot useful vs the player? Anchor should sit roughly between spot and player.
+    function coverProtects(spot, fromPos, playerPos) {
+      // Vector from cover stand → player should pass near the anchor (prop)
+      const toPlayer = playerPos.subtract(spot.pos);
+      toPlayer.y = 0;
+      if (toPlayer.length() < 1.5) return false;
+      const toAnchor = spot.anchor.subtract(spot.pos);
+      toAnchor.y = 0;
+      // Anchor roughly in the direction of the player from the stand point
+      const dot = BABYLON.Vector3.Dot(toPlayer.normalize(), toAnchor.normalize());
+      if (dot < 0.15) return false;
+      // Prefer spots where path from stand to player is blocked by geometry
+      const blocked = lineBlocked(spot.pos, playerPos, 5);
+      return blocked || dot > 0.45;
+    }
+
+    function findCoverSpot(enemyPos, playerPos, currentSpot) {
+      let best = null;
+      let bestScore = -Infinity;
+      for (let i = 0; i < COVER_SPOTS.length; i++) {
+        const spot = COVER_SPOTS[i];
+        if (currentSpot && spot.pos.equals(currentSpot)) continue;
+        const dist = BABYLON.Vector3.Distance(enemyPos, spot.pos);
+        if (dist < 1.2 || dist > 14) continue;
+        if (!canMoveTo(spot.pos)) continue;
+        if (!coverProtects(spot, enemyPos, playerPos)) continue;
+        // Prefer closer cover that is farther from the player than we currently are
+        const distToPlayer = BABYLON.Vector3.Distance(spot.pos, playerPos);
+        const myDist = BABYLON.Vector3.Distance(enemyPos, playerPos);
+        let score = distToPlayer * 0.4 - dist * 0.8;
+        if (distToPlayer > myDist * 0.7) score += 2;
+        // Slight preference for not the same region
+        if (score > bestScore) {
+          bestScore = score;
+          best = spot;
+        }
+      }
+      return best;
+    }
+
+    // Steering toward a point while sliding around obstacles
+    function moveToward(e, target, speed, dt) {
+      const toT = target.subtract(e.root.position);
+      toT.y = 0;
+      const dist = toT.length();
+      if (dist < 0.45) return true; // arrived
+      toT.normalize();
+      const step = speed * dt;
+      let next = e.root.position.add(toT.scale(step));
+      if (canMoveTo(next)) {
+        e.root.position.copyFrom(next);
+        e.root.rotation.y = Math.atan2(toT.x, toT.z);
+        return false;
+      }
+      // Try perpendicular slides
+      const perp1 = new BABYLON.Vector3(-toT.z, 0, toT.x);
+      const perp2 = new BABYLON.Vector3(toT.z, 0, -toT.x);
+      for (const p of [perp1, perp2]) {
+        next = e.root.position.add(p.scale(step * 0.9)).add(toT.scale(step * 0.35));
+        if (canMoveTo(next)) {
+          e.root.position.copyFrom(next);
+          e.root.rotation.y = Math.atan2(toT.x, toT.z);
+          return false;
+        }
+      }
+      // Pure slide along axes
+      const nx = e.root.position.clone(); nx.x += toT.x * step;
+      const nz = e.root.position.clone(); nz.z += toT.z * step;
+      if (canMoveTo(nx)) e.root.position.x = nx.x;
+      else if (canMoveTo(nz)) e.root.position.z = nz.z;
+      e.root.rotation.y = Math.atan2(toT.x, toT.z);
+      return false;
+    }
+
+    function createEnemy(x, z, patrolPoints) {
+      const root = new BABYLON.TransformNode('eRoot', scene);
+      root.position = new BABYLON.Vector3(x, 0, z);
+
+      const body = BABYLON.MeshBuilder.CreateCapsule('eBody', { height: 1.6, radius: 0.32 }, scene);
+      body.parent = root;
+      body.position.y = 0.8;
+      body.material = enemyMat;
+      shadowGen.addShadowCaster(body);
+
+      const eHead = BABYLON.MeshBuilder.CreateSphere('eHead', { diameter: 0.38 }, scene);
+      eHead.parent = root;
+      eHead.position.y = 1.65;
+      eHead.material = enemyMat;
+
+      // Helmet shell (covers face silhouette)
+      const helmet = BABYLON.MeshBuilder.CreateSphere('helm', { diameter: 0.44, segments: 8 }, scene);
+      helmet.parent = eHead;
+      helmet.position.y = 0.04;
+      helmet.material = enemyMat;
+
+      // Glowing orange goggles (Enforcer signature)
+      const goggleL = BABYLON.MeshBuilder.CreateSphere('gL', { diameter: 0.13, segments: 6 }, scene);
+      goggleL.parent = eHead;
+      goggleL.position = new BABYLON.Vector3(-0.075, 0.01, 0.17);
+      goggleL.material = goggleMat;
+      const goggleR = BABYLON.MeshBuilder.CreateSphere('gR', { diameter: 0.13, segments: 6 }, scene);
+      goggleR.parent = eHead;
+      goggleR.position = new BABYLON.Vector3(0.075, 0.01, 0.17);
+      goggleR.material = goggleMat;
+
+      // Tactical vest plate
+      const vest = BABYLON.MeshBuilder.CreateBox('vest', { width: 0.42, height: 0.32, depth: 0.16 }, scene);
+      vest.parent = body;
+      vest.position = new BABYLON.Vector3(0, 0.12, 0.2);
+      vest.material = vestMat;
+
+      // Shoulder pads
+      const padL = BABYLON.MeshBuilder.CreateBox('padL', { width: 0.16, height: 0.1, depth: 0.2 }, scene);
+      padL.parent = body;
+      padL.position = new BABYLON.Vector3(-0.26, 0.32, 0);
+      padL.material = vestMat;
+      const padR = BABYLON.MeshBuilder.CreateBox('padR', { width: 0.16, height: 0.1, depth: 0.2 }, scene);
+      padR.parent = body;
+      padR.position = new BABYLON.Vector3(0.26, 0.32, 0);
+      padR.material = vestMat;
+
+      const eGun = BABYLON.MeshBuilder.CreateBox('eGun', { width: 0.1, height: 0.12, depth: 0.5 }, scene);
+      eGun.parent = root;
+      eGun.position = new BABYLON.Vector3(0.25, 1.1, 0.3);
+      eGun.material = gunMat;
+
+      const extras = [helmet, goggleL, goggleR, vest, padL, padR];
+
+      const e = {
+        root, body, head: eHead, gun: eGun, extras,
+        hp: 60, maxHp: 60, alive: true,
+        state: 'patrol',
+        patrolPoints, patrolIdx: 0,
+        detectRange: 11, attackRange: 9,
+        shootTimer: 0, speed: 3.2,
+        lastKnown: null, alert: 0,
+        // Combat feedback state
+        flinchTimer: 0,
+        flinchDir: new BABYLON.Vector3(0, 0, 0),
+        hitFlashTimer: 0,
+        deathTimer: 0,
+        collapsing: false,
+        baseBodyY: 0.8,
+        baseHeadY: 1.65,
+        // Cover behavior
+        coverSpot: null,       // { pos, anchor }
+        coverCooldown: 0,       // decision cooldown
+        coverHoldTimer: 0,     // time spent in cover before peek
+        peekTimer: 0,          // time spent peeking / firing
+        coverFailTimer: 0      // abandon seek if stuck
+      };
+      enemies.push(e);
+      return e;
+    }
+
+    function damageEnemy(e, amount, hitDir) {
+      if (!e.alive || e.collapsing) return;
+      e.hp -= amount;
+
+      // Flinch + knockback (rate-limited)
+      if (e.flinchTimer <= 0) {
+        e.flinchTimer = 0.18;
+        e.flinchDir.copyFrom(hitDir);
+        e.flinchDir.y = 0;
+        if (e.flinchDir.length() > 0.01) e.flinchDir.normalize();
+      }
+      // Brief material flash (won't restart if already flashing)
+      if (e.hitFlashTimer <= 0) {
+        e.hitFlashTimer = 0.1;
+        e.body.material = hitFlashMat;
+        e.head.material = hitFlashMat;
+      }
+
+      // Impact flash at chest
+      const hitPos = e.root.position.add(new BABYLON.Vector3(0, 1.1, 0)).add(hitDir.scale(-0.3));
+      spawnFlash(hitPos, new BABYLON.Color3(1, 0.6, 0.2), 0.45, 0.11);
+      sfxHit();
+
+      // Small knockback
+      const kb = e.root.position.add(hitDir.scale(0.35));
+      if (canMoveTo(kb)) e.root.position.copyFrom(kb);
+
+      // Cover decision: under fire → seek nearby cover (with cooldown)
+      if (e.hp > 0 && e.coverCooldown <= 0 &&
+          e.state !== 'seekCover' && e.state !== 'inCover' && e.state !== 'peekFire') {
+        const spot = findCoverSpot(e.root.position, playerRoot.position, null);
+        if (spot) {
+          e.coverSpot = spot;
+          e.state = 'seekCover';
+          e.coverFailTimer = 4.5;
+          e.coverCooldown = 3.5; // prevent rapid re-decisions
+          e.alert = 4;
+        }
+      }
+
+      if (e.hp <= 0) {
+        killEnemy(e, hitDir);
+      }
+    }
+
+    // ========== ENCOUNTER / MISSION STATE ==========
+    let hostilesRemaining = 3;
+    let sectorSecured = false;
+    const hostilesCountEl = document.getElementById('hostilesCount');
+    const camerasCountEl = document.getElementById('camerasCount');
+    const hostilesLineEl = document.getElementById('hostilesLine');
+    const camerasLineEl = document.getElementById('camerasLine');
+    const missionHudEl = document.getElementById('missionHud');
+    const replayBtn = document.getElementById('replayBtn');
+
+    function updateMissionHud() {
+      if (hostilesCountEl) hostilesCountEl.textContent = String(hostilesRemaining);
+      if (camerasCountEl) camerasCountEl.textContent = String(camerasOnline);
+      if (hostilesLineEl) {
+        if (hostilesRemaining <= 0) hostilesLineEl.classList.add('cleared');
+        else hostilesLineEl.classList.remove('cleared');
+      }
+      if (camerasLineEl) {
+        if (camerasOnline <= 0) camerasLineEl.classList.add('cleared');
+        else camerasLineEl.classList.remove('cleared');
+      }
+      if (missionHudEl) {
+        if (hostilesRemaining <= 0 && camerasOnline <= 0) missionHudEl.classList.add('complete');
+        else missionHudEl.classList.remove('complete');
+      }
+    }
+    // Back-compat alias used by older calls
+    function updateHostilesHud() { updateMissionHud(); }
+
+    function checkMissionComplete() {
+      if (sectorSecured) return;
+      if (hostilesRemaining <= 0 && camerasOnline <= 0) {
+        sectorSecured = true;
+        setTimeout(() => {
+          showMsg('SECTOR SECURED\nR.E.D. SURVEILLANCE DISRUPTED', 4.5);
+          if (replayBtn) replayBtn.classList.add('visible');
+        }, 700);
+      }
+    }
+
+    function destroyCamera(cam, hitPos) {
+      if (!cam.alive) return;
+      cam.alive = false;
+      cam.hp = 0;
+      cam.lite.material = camLightOffMat;
+      cam.body.material = deadMat;
+      cam.lens.material = deadMat;
+      cam.root.rotation.z = 0.35;
+      cam.root.rotation.x = 0.2;
+      if (hitPos) {
+        spawnFlash(hitPos, new BABYLON.Color3(1, 0.4, 0.15), 0.55, 0.15);
+        spawnSparks(hitPos, 5);
+      }
+      sfxKill();
+      if (camerasOnline > 0) {
+        camerasOnline -= 1;
+        updateMissionHud();
+      }
+      showMsg('CAMERA DISABLED', 1.0);
+      checkMissionComplete();
+    }
+
+    function damageCamera(cam, amount, hitPos) {
+      if (!cam.alive) return;
+      cam.hp -= amount;
+      if (cam.hitFlashTimer <= 0) {
+        cam.hitFlashTimer = 0.12;
+        cam.body.material = hitFlashMat;
+        // Briefly intensify the indicator light on hit
+        cam.lite.material = camLightOnMat;
+        cam.lite.scaling.setAll(1.6);
+      }
+      const p = hitPos || cam.body.getAbsolutePosition();
+      spawnFlash(p, new BABYLON.Color3(1, 0.5, 0.2), 0.4, 0.12);
+      sfxHit();
+      if (cam.hp <= 0) {
+        destroyCamera(cam, p);
+      }
+    }
+
+    function killEnemy(e, hitDir) {
+      if (!e.alive) return; // count each enemy only once
+      e.alive = false;
+      e.collapsing = true;
+      e.deathTimer = 2.2;
+      e.state = 'dead';
+      e.shootTimer = 999;
+      e.body.material = deadMat;
+      e.head.material = deadMat;
+      const tip = hitDir && hitDir.length() > 0.01
+        ? Math.atan2(hitDir.x, hitDir.z) + Math.PI
+        : e.root.rotation.y;
+      e.collapseYaw = tip;
+      sfxKill();
+
+      if (hostilesRemaining > 0) {
+        hostilesRemaining -= 1;
+        updateMissionHud();
+      }
+      showMsg('HOSTILE DOWN', 0.9);
+      checkMissionComplete();
+    }
+
+    // Spawn data for replay resets
+    const ENEMY_SPAWNS = [
+      { x: -10, z: 12, patrol: [
+        new BABYLON.Vector3(-10, 0, 12),
+        new BABYLON.Vector3(-4, 0, 14),
+        new BABYLON.Vector3(-12, 0, 6)
+      ]},
+      { x: 12, z: 6, patrol: [
+        new BABYLON.Vector3(12, 0, 6),
+        new BABYLON.Vector3(14, 0, -2),
+        new BABYLON.Vector3(8, 0, 10)
+      ]},
+      { x: -6, z: -4, patrol: [
+        new BABYLON.Vector3(-6, 0, -4),
+        new BABYLON.Vector3(-14, 0, -6),
+        new BABYLON.Vector3(-2, 0, 2)
+      ]}
+    ];
+
+    function resetEncounter() {
+      // Player
+      playerRoot.position.set(0, 0, -14);
+      playerRoot.rotation.y = 0;
+      playerHP = maxHP;
+      playerAlive = true;
+      updateHealthUI();
+      aimDir.set(0, 0, 1);
+      smoothedAim.set(0, 0, 1);
+      gunRecoil = 0;
+      if (typeof gunBasePos !== 'undefined') gun.position.copyFrom(gunBasePos);
+
+      // Scan
+      scanActive = false;
+      scanTimer = 0;
+      scanCooldown = 0;
+      scanBtn.classList.remove('cooldown', 'active');
+      const scanLab = scanBtn.querySelector('#scanLabel');
+      if (scanLab) scanLab.textContent = 'SCAN';
+
+      // Clear bullets
+      for (let i = bullets.length - 1; i >= 0; i--) {
+        try { bullets[i].mesh.material.dispose(); bullets[i].mesh.dispose(); } catch (err) {}
+        bullets.splice(i, 1);
+      }
+      // Clear FX
+      for (let i = activeFx.length - 1; i >= 0; i--) {
+        const f = activeFx[i];
+        try {
+          if (f.isSpark) { f.mesh.material.dispose(); f.mesh.dispose(); }
+          else { f.mesh.setEnabled(false); fxPool.push(f.mesh); }
+        } catch (err) {}
+        activeFx.splice(i, 1);
+      }
+
+      // Reset each enemy in place (no new objects / listeners)
+      enemies.forEach((e, idx) => {
+        const spawn = ENEMY_SPAWNS[idx];
+        e.alive = true;
+        e.collapsing = false;
+        e.hp = e.maxHp;
+        e.state = 'patrol';
+        e.patrolIdx = 0;
+        e.shootTimer = 0;
+        e.alert = 0;
+        e.lastKnown = null;
+        e.flinchTimer = 0;
+        e.hitFlashTimer = 0;
+        e.deathTimer = 0;
+        e.coverSpot = null;
+        e.coverCooldown = 0;
+        e.coverHoldTimer = 0;
+        e.peekTimer = 0;
+        e.coverFailTimer = 0;
+        e.patrolPoints = spawn.patrol;
+        e.root.setEnabled(true);
+        e.root.position.set(spawn.x, 0, spawn.z);
+        e.root.rotation.set(0, 0, 0);
+        e.body.setEnabled(true);
+        e.head.setEnabled(true);
+        e.gun.setEnabled(true);
+        e.body.visibility = 1;
+        e.head.visibility = 1;
+        e.gun.visibility = 1;
+        if (e.extras) {
+          for (const m of e.extras) {
+            m.visibility = 1;
+            m.setEnabled(true);
+          }
+        }
+        e.body.position.y = e.baseBodyY;
+        e.head.position.y = e.baseHeadY;
+        e.gun.position.set(0.25, 1.1, 0.3);
+        e.gun.rotation.set(0, 0, 0);
+        e.body.rotation.set(0, 0, 0);
+        e.body.material = enemyMat;
+        e.head.material = enemyMat;
+      });
+
+      // Reset cameras
+      cameras.forEach(cam => {
+        cam.alive = true;
+        cam.hp = cam.maxHp;
+        cam.hitFlashTimer = 0;
+        cam.lite.material = camLightOnMat;
+        cam.body.material = camBodyMat;
+        cam.lens.material = camLensMat;
+        cam.root.rotation.x = 0;
+        cam.root.rotation.z = 0;
+        cam.body.setEnabled(true);
+        cam.lens.setEnabled(true);
+        cam.lite.setEnabled(true);
+        cam.arm.setEnabled(true);
+        cam.root.setEnabled(true);
+      });
+      camerasOnline = cameras.length;
+
+      hostilesRemaining = enemies.length;
+      sectorSecured = false;
+      updateMissionHud();
+      if (replayBtn) replayBtn.classList.remove('visible');
+      showMsg('MISSION: FIRST SIGNAL\nOBJECTIVE: DISABLE R.E.D. SURVEILLANCE', 2.5);
+    }
+
+    replayBtn.addEventListener('click', e => {
+      e.preventDefault(); e.stopPropagation();
+      resetEncounter();
+    });
+    replayBtn.addEventListener('touchstart', e => {
+      e.preventDefault(); e.stopPropagation();
+      resetEncounter();
+    }, { passive: false });
+
+    function updateEnemyFeedback(e, dt) {
+      // Flinch recovery
+      if (e.flinchTimer > 0) {
+        e.flinchTimer -= dt;
+        // Slight lean away from hit
+        const lean = Math.min(1, e.flinchTimer / 0.18) * 0.18;
+        e.body.rotation.x = -lean * e.flinchDir.z;
+        e.body.rotation.z = lean * e.flinchDir.x;
+        e.head.position.y = e.baseHeadY - lean * 0.15;
+      } else if (!e.collapsing) {
+        e.body.rotation.x *= 0.7;
+        e.body.rotation.z *= 0.7;
+        e.head.position.y = e.baseHeadY;
+      }
+
+      // Hit flash end
+      if (e.hitFlashTimer > 0) {
+        e.hitFlashTimer -= dt;
+        if (e.hitFlashTimer <= 0 && e.alive) {
+          e.body.material = scanActive ? highlightMat : enemyMat;
+          e.head.material = scanActive ? highlightMat : enemyMat;
+        }
+      }
+
+      // Collapse animation then fade
+      if (e.collapsing) {
+        e.deathTimer -= dt;
+        const progress = 1 - Math.max(0, e.deathTimer - 0.4) / 1.8; // 0→1 over collapse
+        // Fall over
+        const fallAmt = Math.min(1, progress * 1.6);
+        e.root.rotation.x = fallAmt * (Math.PI / 2) * 0.95;
+        e.body.position.y = e.baseBodyY * (1 - fallAmt * 0.5);
+        e.head.position.y = e.baseHeadY - fallAmt * 0.9;
+        e.gun.position.y = 1.1 - fallAmt * 0.7;
+        e.gun.rotation.x = fallAmt * 0.8;
+        // Fade in last 0.6s (per-mesh visibility, shared mat stays opaque)
+        if (e.deathTimer < 0.6) {
+          const a = Math.max(0, e.deathTimer / 0.6);
+          e.body.visibility = a;
+          e.head.visibility = a;
+          e.gun.visibility = a;
+          if (e.extras) for (const m of e.extras) m.visibility = a;
+        }
+        if (e.deathTimer <= 0) {
+          e.collapsing = false;
+          e.body.setEnabled(false);
+          e.head.setEnabled(false);
+          e.gun.setEnabled(false);
+          if (e.extras) for (const m of e.extras) m.setEnabled(false);
+          e.root.setEnabled(false);
+        }
+      }
+    }
+
+    createEnemy(-10, 12, [
+      new BABYLON.Vector3(-10, 0, 12),
+      new BABYLON.Vector3(-4, 0, 14),
+      new BABYLON.Vector3(-12, 0, 6)
+    ]);
+    createEnemy(12, 6, [
+      new BABYLON.Vector3(12, 0, 6),
+      new BABYLON.Vector3(14, 0, -2),
+      new BABYLON.Vector3(8, 0, 10)
+    ]);
+    createEnemy(-6, -4, [
+      new BABYLON.Vector3(-6, 0, -4),
+      new BABYLON.Vector3(-14, 0, -6),
+      new BABYLON.Vector3(-2, 0, 2)
+    ]);
+
+    // UI elements
+    const healthFill = document.getElementById('healthFill');
+    const healthText = document.getElementById('healthText');
+    const scanBtn = document.getElementById('scanBtn');
+    const msgEl = document.getElementById('msg');
+    const moveBase = document.getElementById('moveBase');
+    const moveKnob = document.getElementById('moveKnob');
+    const moveZone = document.getElementById('moveZone');
+    const aimBase = document.getElementById('aimBase');
+    const aimKnob = document.getElementById('aimKnob');
+    const aimZone = document.getElementById('aimZone');
+    const fireBtn = document.getElementById('fireBtn');
+    const modeToggle = document.getElementById('modeToggle');
+    const modeNameEl = document.getElementById('modeName');
+    const modeLabelEl = document.getElementById('modeLabel');
+    const aimHintEl = document.getElementById('aimHint');
+
+    function showMsg(text, duration = 1.5) {
+      msgEl.textContent = text;
+      msgEl.classList.add('show');
+      setTimeout(() => msgEl.classList.remove('show'), duration * 1000);
+    }
+
+    function updateHealthUI() {
+      const pct = Math.max(0, playerHP / maxHP * 100);
+      healthFill.style.width = pct + '%';
+      healthText.textContent = Math.ceil(playerHP);
+      if (pct < 30) healthFill.style.background = 'linear-gradient(90deg, #8b0000, #c0392b)';
+      else healthFill.style.background = 'linear-gradient(90deg, #c0392b, #e74c3c)';
+    }
+
+    // ========== CONTROL MODE (A = twin-stick fire, B = independent aim + fire btn) ==========
+    // Mode A: right stick aims AND fires while held (original)
+    // Mode B: right stick aims only; separate FIRE button shoots
+    let controlMode = 'A'; // 'A' or 'B'
+    let fireBtnHeld = false;
+    let fireTouchId = null;
+
+    function applyControlMode() {
+      // Always clear fire-button state on mode switch
+      fireBtnHeld = false;
+      fireTouchId = null;
+      fireBtn.classList.remove('pressed');
+      if (controlMode === 'A') {
+        modeNameEl.textContent = 'A';
+        modeLabelEl.textContent = 'Twin-Stick Fire';
+        fireBtn.classList.remove('visible');
+        aimHintEl.textContent = 'AIM / FIRE';
+      } else {
+        modeNameEl.textContent = 'B';
+        modeLabelEl.textContent = 'Aim + Fire Btn';
+        fireBtn.classList.add('visible');
+        aimHintEl.textContent = 'AIM ONLY';
+      }
+      // isShooting is re-derived every frame from aimActive / fireBtnHeld
+    }
+    modeToggle.addEventListener('click', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      controlMode = controlMode === 'A' ? 'B' : 'A';
+      applyControlMode();
+      showMsg(controlMode === 'A' ? 'MODE A — Twin-Stick Fire' : 'MODE B — Aim + Fire Button', 1.4);
+    });
+    modeToggle.addEventListener('touchstart', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      controlMode = controlMode === 'A' ? 'B' : 'A';
+      applyControlMode();
+      showMsg(controlMode === 'A' ? 'MODE A — Twin-Stick Fire' : 'MODE B — Aim + Fire Button', 1.4);
+    }, { passive: false });
+    applyControlMode();
+
+    // ========== TWIN-STICK CONTROLS ==========
+    const JOY_R = 52;               // visual radius
+    const AIM_SENSITIVITY = 1.15;   // adjustable aim stick sensitivity
+    const AIM_SMOOTH = 0.22;        // higher = snappier, lower = smoother
+    const AIM_ASSIST_ANGLE = 0.38;  // radians (~22°) cone for assist
+    const AIM_ASSIST_STRENGTH = 0.55;
+    const AIM_ASSIST_RANGE = 14;    // max distance for assist
+
+    let moveActive = false;
+    let moveOrigin = { x: 0, y: 0 };
+    let moveTouchId = null;
+
+    let aimActive = false;
+    let aimOrigin = { x: 0, y: 0 };
+    let aimTouchId = null;
+    let rawAimInput = new BABYLON.Vector2(0, 0); // current stick vector
+    let smoothedAim = new BABYLON.Vector3(0, 0, 1); // smoothed world direction
+
+    // Visual aim line (3D) — thin box we orient each frame
+    const aimLine = BABYLON.MeshBuilder.CreateBox('aimLine', {
+      width: 0.06, height: 0.06, depth: 9
+    }, scene);
+    const aimLineMat = new BABYLON.StandardMaterial('aimLineMat', scene);
+    aimLineMat.emissiveColor = new BABYLON.Color3(0.25, 0.7, 1);
+    aimLineMat.alpha = 0.5;
+    aimLineMat.disableLighting = true;
+    aimLine.material = aimLineMat;
+    aimLine.isVisible = false;
+    aimLine.isPickable = false;
+
+    // --- Move stick ---
+    function startMove(cx, cy, id) {
+      moveActive = true;
+      moveTouchId = id;
+      moveOrigin = { x: cx, y: cy };
+      moveBase.style.display = 'block';
+      moveBase.style.left = (cx - 60) + 'px';
+      moveBase.style.top = (cy - 60) + 'px';
+      moveKnob.style.left = '33px';
+      moveKnob.style.top = '33px';
+    }
+    function updateMove(cx, cy) {
+      if (!moveActive) return;
+      let dx = cx - moveOrigin.x;
+      let dy = cy - moveOrigin.y;
+      const len = Math.sqrt(dx * dx + dy * dy);
+      if (len > JOY_R) { dx = (dx / len) * JOY_R; dy = (dy / len) * JOY_R; }
+      moveKnob.style.left = (33 + dx) + 'px';
+      moveKnob.style.top = (33 + dy) + 'px';
+      moveInput.x = dx / JOY_R;
+      moveInput.y = -dy / JOY_R; // screen up = +Z
+    }
+    function endMove() {
+      moveActive = false;
+      moveTouchId = null;
+      moveInput.set(0, 0);
+      moveBase.style.display = 'none';
+    }
+
+    // --- Aim stick ---
+    // Mode A: aim stick also drives firing (via isShooting derivation in main loop)
+    // Mode B: aim stick ONLY aims; firing is exclusively via FIRE button
+    function startAim(cx, cy, id) {
+      aimActive = true;
+      aimTouchId = id;
+      aimOrigin = { x: cx, y: cy };
+      aimBase.style.display = 'block';
+      aimBase.style.left = (cx - 60) + 'px';
+      aimBase.style.top = (cy - 60) + 'px';
+      aimKnob.style.left = '33px';
+      aimKnob.style.top = '33px';
+      rawAimInput.set(0, 0);
+      // Do NOT snap aimDir — keep current facing to avoid jumps
+    }
+    function updateAim(cx, cy) {
+      if (!aimActive) return;
+      let dx = (cx - aimOrigin.x) * AIM_SENSITIVITY;
+      let dy = (cy - aimOrigin.y) * AIM_SENSITIVITY;
+      const len = Math.sqrt(dx * dx + dy * dy);
+      const maxR = JOY_R * AIM_SENSITIVITY;
+      if (len > maxR) { dx = (dx / len) * maxR; dy = (dy / len) * maxR; }
+      const vLen = Math.min(len / AIM_SENSITIVITY, JOY_R);
+      const vx = len > 0.01 ? (dx / len) * vLen : 0;
+      const vy = len > 0.01 ? (dy / len) * vLen : 0;
+      aimKnob.style.left = (33 + vx) + 'px';
+      aimKnob.style.top = (33 + vy) + 'px';
+      rawAimInput.x = dx / maxR;
+      rawAimInput.y = -dy / maxR;
+    }
+    function endAim() {
+      aimActive = false;
+      aimTouchId = null;
+      rawAimInput.set(0, 0);
+      aimBase.style.display = 'none';
+      // Aim direction (smoothedAim / aimDir) is preserved so Mode B can
+      // keep firing in the last aimed direction after releasing the stick.
+    }
+
+    // Helper: is this point over the FIRE button?
+    function isOverFireBtn(cx, cy) {
+      if (controlMode !== 'B' || !fireBtn.classList.contains('visible')) return false;
+      const r = fireBtn.getBoundingClientRect();
+      // Expand hit area slightly for fat fingers
+      const pad = 8;
+      return cx >= r.left - pad && cx <= r.right + pad &&
+             cy >= r.top - pad && cy <= r.bottom + pad;
+    }
+    // Helper: is this point over SCAN button?
+    function isOverScanBtn(cx, cy) {
+      const r = scanBtn.getBoundingClientRect();
+      const pad = 6;
+      return cx >= r.left - pad && cx <= r.right + pad &&
+             cy >= r.top - pad && cy <= r.bottom + pad;
+    }
+
+    // Touch handlers for both zones
+    function onTouchStart(e, isMoveZone) {
+      e.preventDefault();
+      for (const t of e.changedTouches) {
+        // Never let aim zone steal FIRE or SCAN touches
+        if (!isMoveZone && (isOverFireBtn(t.clientX, t.clientY) || isOverScanBtn(t.clientX, t.clientY))) {
+          continue;
+        }
+        if (isMoveZone && moveTouchId === null) {
+          startMove(t.clientX, t.clientY, t.identifier);
+        } else if (!isMoveZone && aimTouchId === null) {
+          startAim(t.clientX, t.clientY, t.identifier);
+        }
+      }
+    }
+    function onTouchMove(e) {
+      e.preventDefault();
+      for (const t of e.changedTouches) {
+        if (t.identifier === moveTouchId) updateMove(t.clientX, t.clientY);
+        if (t.identifier === aimTouchId) updateAim(t.clientX, t.clientY);
+      }
+    }
+    function onTouchEnd(e) {
+      for (const t of e.changedTouches) {
+        if (t.identifier === moveTouchId) endMove();
+        if (t.identifier === aimTouchId) endAim();
+        if (t.identifier === fireTouchId) endFire();
+      }
+    }
+
+    moveZone.addEventListener('touchstart', e => onTouchStart(e, true), { passive: false });
+    aimZone.addEventListener('touchstart', e => onTouchStart(e, false), { passive: false });
+    window.addEventListener('touchmove', onTouchMove, { passive: false });
+    window.addEventListener('touchend', onTouchEnd, { passive: false });
+    window.addEventListener('touchcancel', onTouchEnd, { passive: false });
+
+    // --- FIRE button (Mode B only) — independent touch channel ---
+    function startFire(id) {
+      if (controlMode !== 'B') return;
+      fireBtnHeld = true;
+      fireTouchId = id;
+      isShooting = true;
+      fireBtn.classList.add('pressed');
+    }
+    function endFire() {
+      if (fireTouchId === null && !fireBtnHeld) return;
+      fireBtnHeld = false;
+      fireTouchId = null;
+      fireBtn.classList.remove('pressed');
+      // Only clear shooting in Mode B; Mode A is driven by aim stick
+      if (controlMode === 'B') {
+        isShooting = false;
+      }
+    }
+
+    // Capture phase so FIRE gets the event before aimZone
+    fireBtn.addEventListener('touchstart', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      if (controlMode !== 'B') return;
+      for (const t of e.changedTouches) {
+        if (fireTouchId === null) {
+          startFire(t.identifier);
+          break;
+        }
+      }
+    }, { passive: false, capture: true });
+
+    fireBtn.addEventListener('touchend', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      for (const t of e.changedTouches) {
+        if (t.identifier === fireTouchId) endFire();
+      }
+    }, { passive: false, capture: true });
+
+    fireBtn.addEventListener('touchcancel', e => {
+      e.preventDefault();
+      endFire();
+    }, { passive: false, capture: true });
+
+    // Also listen on window for fire touch end in case finger slides off the button
+    window.addEventListener('touchend', e => {
+      for (const t of e.changedTouches) {
+        if (t.identifier === fireTouchId) endFire();
+      }
+    }, { passive: false });
+
+    // Mouse support for fire button (desktop testing)
+    fireBtn.addEventListener('mousedown', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      startFire('mouseFire');
+    });
+    window.addEventListener('mouseup', e => {
+      if (fireTouchId === 'mouseFire') endFire();
+    });
+
+    // Desktop mouse fallback for move stick
+    let mouseMoveDown = false;
+    moveZone.addEventListener('mousedown', e => {
+      mouseMoveDown = true;
+      startMove(e.clientX, e.clientY, 'mouse');
+    });
+    // Desktop mouse for aim stick (right half) + classic mouse-look
+    let mouseAimDown = false;
+    let usingMousePick = false;
+    aimZone.addEventListener('mousedown', e => {
+      if (e.button === 0) {
+        mouseAimDown = true;
+        startAim(e.clientX, e.clientY, 'mouseAim');
+      }
+    });
+    // Also allow classic click-to-aim anywhere on right half of canvas for precision
+    canvas.addEventListener('mousedown', e => {
+      if (e.button === 0 && e.clientX > window.innerWidth * 0.5 && !mouseAimDown) {
+        usingMousePick = true;
+        isShooting = true;
+        updateAimFromMouse(e.clientX, e.clientY);
+      }
+    });
+    window.addEventListener('mousemove', e => {
+      if (mouseMoveDown) updateMove(e.clientX, e.clientY);
+      if (mouseAimDown) updateAim(e.clientX, e.clientY);
+      if (usingMousePick) updateAimFromMouse(e.clientX, e.clientY);
+    });
+    window.addEventListener('mouseup', e => {
+      if (e.button === 0) {
+        if (mouseMoveDown) { mouseMoveDown = false; endMove(); }
+        if (mouseAimDown) { mouseAimDown = false; endAim(); }
+        if (usingMousePick) {
+          usingMousePick = false;
+          // Only stop shooting if fire button is not held (Mode B)
+          if (!fireBtnHeld && controlMode === 'A') isShooting = false;
+          else if (!fireBtnHeld && controlMode === 'B' && !aimActive) isShooting = false;
+        }
+      }
+    });
+
+    function updateAimFromMouse(mx, my) {
+      const pick = scene.pick(mx, my, m => m === ground);
+      if (pick && pick.hit) {
+        const dir = pick.pickedPoint.subtract(playerRoot.position);
+        dir.y = 0;
+        if (dir.length() > 0.15) {
+          dir.normalize();
+          // Smooth even for mouse
+          smoothedAim = BABYLON.Vector3.Lerp(smoothedAim, dir, 0.35);
+          aimDir.copyFrom(smoothedAim);
+        }
+      }
+    }
+
+    // Keyboard for desktop
+    const keys = {};
+    window.addEventListener('keydown', e => {
+      keys[e.code] = true;
+      if (e.code === 'Space' || e.code === 'KeyE') tryScan();
+    });
+    window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+    // Apply aim smoothing + assist every frame (called from main loop)
+    function updateAimDirection(dt) {
+      if (aimActive && rawAimInput.length() > 0.08) {
+        // Convert stick to world direction (screen-relative)
+        const targetDir = new BABYLON.Vector3(rawAimInput.x, 0, rawAimInput.y);
+        targetDir.normalize();
+
+        // Gentle aim assist
+        let bestEnemy = null;
+        let bestDot = Math.cos(AIM_ASSIST_ANGLE);
+        for (const e of enemies) {
+          if (!e.alive) continue;
+          const toE = e.root.position.subtract(playerRoot.position);
+          toE.y = 0;
+          const dist = toE.length();
+          if (dist > AIM_ASSIST_RANGE || dist < 0.5) continue;
+          toE.normalize();
+          const dot = BABYLON.Vector3.Dot(targetDir, toE);
+          if (dot > bestDot) {
+            bestDot = dot;
+            bestEnemy = toE;
+          }
+        }
+        if (bestEnemy) {
+          targetDir.x = targetDir.x * (1 - AIM_ASSIST_STRENGTH) + bestEnemy.x * AIM_ASSIST_STRENGTH;
+          targetDir.z = targetDir.z * (1 - AIM_ASSIST_STRENGTH) + bestEnemy.z * AIM_ASSIST_STRENGTH;
+          targetDir.normalize();
+        }
+
+        // Smooth toward target
+        const t = 1 - Math.pow(1 - AIM_SMOOTH, dt * 60);
+        smoothedAim = BABYLON.Vector3.Lerp(smoothedAim, targetDir, t);
+        smoothedAim.y = 0;
+        if (smoothedAim.length() > 0.01) smoothedAim.normalize();
+        aimDir.copyFrom(smoothedAim);
+      } else if (!aimActive && !usingMousePick) {
+        // When not aiming, slowly keep last direction (no reset)
+      }
+
+      // Update visual aim line (show while aiming or firing so direction stays clear)
+      if (isShooting || aimActive || (controlMode === 'B' && fireBtnHeld)) {
+        aimLine.isVisible = true;
+        const start = playerRoot.position.add(new BABYLON.Vector3(0, 1.15, 0)).add(aimDir.scale(0.8));
+        aimLine.position.copyFrom(start.add(aimDir.scale(4.5)));
+        aimLine.rotation.y = Math.atan2(aimDir.x, aimDir.z);
+        aimLine.rotation.x = 0;
+        aimLine.rotation.z = 0;
+      } else {
+        aimLine.isVisible = false;
+      }
+    }
+
+    // Scan ability
+    function tryScan() {
+      if (scanCooldown > 0 || !playerAlive) return;
+      scanActive = true;
+      scanTimer = SCAN_DURATION;
+      scanCooldown = SCAN_CD;
+      scanBtn.classList.add('active');
+      showMsg('SURVEILLANCE SCAN ACTIVE', 1.2);
+      // Highlight enemies
+      enemies.forEach(e => {
+        if (e.alive) {
+          e.body.material = highlightMat;
+          e.head.material = highlightMat;
+        }
+      });
+    }
+    scanBtn.addEventListener('click', e => { e.stopPropagation(); tryScan(); });
+    scanBtn.addEventListener('touchstart', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      tryScan();
+    }, { passive: false, capture: true });
+
+    // Damage & death
+    function damagePlayer(amt) {
+      if (!playerAlive) return;
+      playerHP -= amt;
+      updateHealthUI();
+      if (playerHP <= 0) {
+        playerHP = 0;
+        playerAlive = false;
+        showMsg('KIA — RESPAWNING...', 2);
+        setTimeout(respawnPlayer, 2200);
+      }
+    }
+    function respawnPlayer() {
+      playerRoot.position.set(0, 0, -14);
+      playerHP = maxHP;
+      playerAlive = true;
+      updateHealthUI();
+      showMsg('REDEPLOYED', 1);
+    }
+
+    // Enemy AI update
+    function updateEnemies(dt) {
+      // Encounter complete — no more combat AI
+      if (sectorSecured) return;
+
+      enemies.forEach(e => {
+        if (!e.alive) return;
+
+        if (e.coverCooldown > 0) e.coverCooldown -= dt;
+
+        const toPlayer = playerRoot.position.subtract(e.root.position);
+        toPlayer.y = 0;
+        const dist = toPlayer.length();
+        // Surveillance advantage: active cameras extend detection range slightly
+        // and help track the player when cameras are online (minimal existing-compatible bonus)
+        const detectBonus = camerasOnline > 0 ? 3.5 : 0;
+        const effectiveDetect = e.detectRange + detectBonus;
+        const canSee = dist < effectiveDetect && playerAlive;
+
+        let los = canSee;
+        if (canSee) {
+          const mid = e.root.position.add(toPlayer.scale(0.5));
+          // With cameras online, weak LOS through cover for awareness only at longer range
+          if (!canMoveTo(mid)) {
+            if (camerasOnline > 0 && dist < effectiveDetect * 0.85) {
+              los = true; // networked feed approximates position
+              e.lastKnown = playerRoot.position.clone();
+            } else {
+              los = false;
+            }
+          }
+        }
+
+        // --- Cover behavior states (do not let normal AI overwrite these) ---
+        if (e.state === 'seekCover') {
+          e.coverFailTimer -= dt;
+          if (!e.coverSpot || e.coverFailTimer <= 0) {
+            e.coverSpot = null;
+            e.state = los ? (dist < e.attackRange ? 'attack' : 'chase') : 'chase';
+            e.alert = 3;
+          } else {
+            const arrived = moveToward(e, e.coverSpot.pos, e.speed * 1.15, dt);
+            if (arrived) {
+              e.state = 'inCover';
+              e.coverHoldTimer = 0.8 + Math.random() * 0.7;
+              e.peekTimer = 0;
+            }
+          }
+          // Face player while moving if visible
+          if (playerAlive && dist < 16) {
+            // rotation mostly handled by moveToward
+          }
+          return;
+        }
+
+        if (e.state === 'inCover') {
+          e.coverHoldTimer -= dt;
+          // Stay near cover position; face player
+          if (e.coverSpot) {
+            const drift = e.root.position.subtract(e.coverSpot.pos);
+            drift.y = 0;
+            if (drift.length() > 0.6) {
+              moveToward(e, e.coverSpot.pos, e.speed * 0.8, dt);
+            }
+          }
+          if (playerAlive) {
+            e.root.rotation.y = Math.atan2(toPlayer.x, toPlayer.z);
+          }
+          // After holding, peek to fire
+          if (e.coverHoldTimer <= 0 && playerAlive) {
+            e.state = 'peekFire';
+            e.peekTimer = 1.0 + Math.random() * 0.6;
+            e.shootTimer = 0.15;
+          }
+          // If player is very close, abandon cover and fight
+          if (dist < 2.8) {
+            e.state = 'attack';
+            e.coverSpot = null;
+            e.coverCooldown = 2.0;
+          }
+          return;
+        }
+
+        if (e.state === 'peekFire') {
+          e.peekTimer -= dt;
+          // Step slightly out from cover toward player
+          if (e.coverSpot && playerAlive) {
+            const outDir = toPlayer.clone();
+            if (outDir.length() > 0.1) outDir.normalize();
+            const peekPos = e.coverSpot.pos.add(outDir.scale(1.1));
+            moveToward(e, peekPos, e.speed * 0.9, dt);
+            e.root.rotation.y = Math.atan2(toPlayer.x, toPlayer.z);
+            // Fire while peeking
+            if (dist < e.attackRange + 2) {
+              e.shootTimer -= dt;
+              if (e.shootTimer <= 0) {
+                e.shootTimer = 0.5 + Math.random() * 0.25;
+                const dir = toPlayer.normalize();
+                dir.x += (Math.random() - 0.5) * 0.1;
+                dir.z += (Math.random() - 0.5) * 0.1;
+                dir.normalize();
+                const from = e.root.position.add(new BABYLON.Vector3(0, 1.2, 0)).add(dir.scale(0.6));
+                fireBullet(from, dir, false);
+              }
+            }
+          }
+          // Return to cover or resume chase
+          if (e.peekTimer <= 0) {
+            if (e.coverSpot && e.hp < e.maxHp * 0.5 && e.coverCooldown > 0.5) {
+              e.state = 'inCover';
+              e.coverHoldTimer = 0.9 + Math.random() * 0.8;
+            } else if (e.coverSpot) {
+              // One more hold then leave cover cycle
+              e.state = 'inCover';
+              e.coverHoldTimer = 0.5;
+              // Next time peek ends with low cooldown, fall through to normal AI
+              if (e.coverCooldown <= 1.2) {
+                e.coverSpot = null;
+                e.state = los ? (dist < e.attackRange ? 'attack' : 'chase') : 'chase';
+              }
+            } else {
+              e.state = los ? (dist < e.attackRange ? 'attack' : 'chase') : 'chase';
+            }
+          }
+          if (dist < 2.5) {
+            e.state = 'attack';
+            e.coverSpot = null;
+          }
+          return;
+        }
+
+        // --- Standard AI (patrol / chase / attack) ---
+        if (los) {
+          e.state = dist < e.attackRange ? 'attack' : 'chase';
+          e.lastKnown = playerRoot.position.clone();
+          e.alert = 3;
+        } else if (e.alert > 0) {
+          e.alert -= dt;
+          e.state = 'chase';
+        } else {
+          e.state = 'patrol';
+        }
+
+        if (e.state === 'patrol') {
+          const target = e.patrolPoints[e.patrolIdx];
+          const toT = target.subtract(e.root.position);
+          toT.y = 0;
+          if (toT.length() < 0.8) {
+            e.patrolIdx = (e.patrolIdx + 1) % e.patrolPoints.length;
+          } else {
+            moveToward(e, target, e.speed * 0.7, dt);
+          }
+        } else if (e.state === 'chase' || e.state === 'attack') {
+          const targetPos = e.lastKnown || playerRoot.position;
+          const toT = targetPos.subtract(e.root.position);
+          toT.y = 0;
+          const d = toT.length();
+          if (d > 2.5) {
+            moveToward(e, targetPos, e.speed, dt);
+          } else if (playerAlive) {
+            e.root.rotation.y = Math.atan2(toPlayer.x, toPlayer.z);
+          }
+
+          if (e.state === 'attack' && playerAlive && dist < e.attackRange + 1) {
+            e.shootTimer -= dt;
+            if (e.shootTimer <= 0) {
+              e.shootTimer = 0.55 + Math.random() * 0.3;
+              const dir = toPlayer.normalize();
+              dir.x += (Math.random() - 0.5) * 0.12;
+              dir.z += (Math.random() - 0.5) * 0.12;
+              dir.normalize();
+              const from = e.root.position.add(new BABYLON.Vector3(0, 1.2, 0)).add(dir.scale(0.6));
+              fireBullet(from, dir, false);
+            }
+          }
+        }
+      });
+    }
+
+    // Main loop
+    let lastTime = performance.now();
+    scene.registerBeforeRender(() => {
+      const now = performance.now();
+      const dt = Math.min((now - lastTime) / 1000, 0.05);
+      lastTime = now;
+
+      // Keyboard move (desktop) — only when not using touch/mouse stick
+      if (!moveActive) {
+        let kx = 0, ky = 0;
+        if (keys['KeyW'] || keys['ArrowUp']) ky += 1;
+        if (keys['KeyS'] || keys['ArrowDown']) ky -= 1;
+        if (keys['KeyA'] || keys['ArrowLeft']) kx -= 1;
+        if (keys['KeyD'] || keys['ArrowRight']) kx += 1;
+        if (kx !== 0 || ky !== 0) {
+          const len = Math.sqrt(kx * kx + ky * ky);
+          moveInput.x = kx / len;
+          moveInput.y = ky / len;
+        } else {
+          moveInput.set(0, 0);
+        }
+      }
+
+      // Smooth aim + assist (always)
+      updateAimDirection(dt);
+
+      // Derive shooting state from the active control mode every frame
+      // Mode A: shooting while aim stick is held
+      // Mode B: shooting only while FIRE button is held (aim stick never fires)
+      if (controlMode === 'A') {
+        isShooting = aimActive || usingMousePick;
+      } else {
+        isShooting = fireBtnHeld || (usingMousePick && !aimActive);
+      }
+
+      if (playerAlive) {
+        // Move — screen-relative (stick up = +Z)
+        if (moveInput.length() > 0.05) {
+          const speed = 6.2;
+          const move = new BABYLON.Vector3(moveInput.x, 0, moveInput.y);
+          if (move.length() > 0.01) {
+            move.normalize();
+            const next = playerRoot.position.add(move.scale(speed * dt));
+            if (canMoveTo(next)) {
+              playerRoot.position.copyFrom(next);
+            } else {
+              const nextX = playerRoot.position.clone(); nextX.x = next.x;
+              const nextZ = playerRoot.position.clone(); nextZ.z = next.z;
+              if (canMoveTo(nextX)) playerRoot.position.x = next.x;
+              if (canMoveTo(nextZ)) playerRoot.position.z = next.z;
+            }
+            if (!isShooting && !aimActive) {
+              playerRoot.rotation.y = Math.atan2(move.x, move.z);
+            }
+          }
+        }
+
+        // Face aim direction while aiming or firing
+        if ((isShooting || aimActive) && aimDir.length() > 0.1) {
+          const targetYaw = Math.atan2(aimDir.x, aimDir.z);
+          let dy = targetYaw - playerRoot.rotation.y;
+          while (dy > Math.PI) dy -= Math.PI * 2;
+          while (dy < -Math.PI) dy += Math.PI * 2;
+          playerRoot.rotation.y += dy * Math.min(1, 12 * dt);
+        }
+
+        // Shoot in current aimDir
+        shootCooldown -= dt;
+        if (isShooting && shootCooldown <= 0 && aimDir.length() > 0.05) {
+          shootCooldown = shootRate;
+          const from = playerRoot.position.add(new BABYLON.Vector3(0, 1.2, 0)).add(aimDir.scale(0.7));
+          fireBullet(from, aimDir.clone(), true);
+          // Muzzle flash
+          muzzle.isVisible = true;
+          muzzle.scaling.setAll(1.4 + Math.random() * 0.4);
+          setTimeout(() => { muzzle.isVisible = false; }, 55);
+          // Subtle gun recoil (does not disrupt aim)
+          gunRecoil = 0.14;
+          sfxShoot();
+        }
+        // Recover gun recoil
+        if (gunRecoil > 0) {
+          gunRecoil = Math.max(0, gunRecoil - dt * 1.8);
+          gun.position.z = gunBasePos.z - gunRecoil * 0.55;
+          gun.position.y = gunBasePos.y + gunRecoil * 0.08;
+        } else {
+          gun.position.copyFrom(gunBasePos);
+        }
+      }
+
+      // Bullets
+      for (let i = bullets.length - 1; i >= 0; i--) {
+        const b = bullets[i];
+        const prevPos = b.mesh.position.clone();
+        b.mesh.position.addInPlace(b.vel.scale(dt));
+        b.life -= dt;
+        if (b.life <= 0) {
+          b.mesh.material.dispose();
+          b.mesh.dispose();
+          bullets.splice(i, 1);
+          continue;
+        }
+        // Hit player?
+        if (!b.isPlayer && playerAlive) {
+          const d = BABYLON.Vector3.Distance(b.mesh.position, playerRoot.position.add(new BABYLON.Vector3(0,1,0)));
+          if (d < 0.6) {
+            damagePlayer(12 + Math.random() * 6);
+            spawnFlash(b.mesh.position.clone(), new BABYLON.Color3(1, 0.3, 0.2), 0.35, 0.1);
+            b.mesh.material.dispose();
+            b.mesh.dispose();
+            bullets.splice(i, 1);
+            continue;
+          }
+        }
+        // Hit enemies
+        if (b.isPlayer) {
+          let hit = false;
+          for (const e of enemies) {
+            if (!e.alive || e.collapsing) continue;
+            const d = BABYLON.Vector3.Distance(b.mesh.position, e.root.position.add(new BABYLON.Vector3(0, 1.0, 0)));
+            if (d < 1.05) {
+              const hitDir = b.dir ? b.dir.clone() : b.vel.normalize();
+              damageEnemy(e, 22, hitDir);
+              b.mesh.material.dispose();
+              b.mesh.dispose();
+              bullets.splice(i, 1);
+              hit = true;
+              break;
+            }
+          }
+          if (hit) continue;
+          // Hit surveillance cameras (mission objectives)
+          // Cameras are elevated (~y 2.9). Player bullets travel horizontally at ~y 1.2,
+          // so a pure 3D distance check never triggers. Use XZ proximity (aligned with
+          // the visual model) plus a vertical window so elevated cameras are targetable
+          // from the isometric view without letting shots pass through walls (wall check
+          // still runs if no camera is hit).
+          for (let ci = 0; ci < cameras.length; ci++) {
+            const cam = cameras[ci];
+            if (!cam.alive) continue;
+            const camWorld = cam.root.position;
+            const dx = b.mesh.position.x - camWorld.x;
+            const dz = b.mesh.position.z - camWorld.z;
+            const xzDist = Math.sqrt(dx * dx + dz * dz);
+            const camY = cam.body.getAbsolutePosition().y;
+            const bulletY = b.mesh.position.y;
+            // Hit if aimed at the camera's XZ (radius ~1.35) and bullet is in the
+            // vertical span from typical fire height up through the camera body.
+            if (xzDist < 1.35 && bulletY > camY - 2.4 && bulletY < camY + 0.8) {
+              damageCamera(cam, 20, cam.body.getAbsolutePosition().clone());
+              b.mesh.material.dispose();
+              b.mesh.dispose();
+              bullets.splice(i, 1);
+              hit = true;
+              break;
+            }
+          }
+          if (hit) continue;
+        }
+        // Hit static cover / walls (AABB check against collision meshes)
+        let wallHit = false;
+        if (Math.abs(b.mesh.position.x) > 21 || Math.abs(b.mesh.position.z) > 21) {
+          wallHit = true;
+        } else {
+          const obstacles = scene.meshes;
+          for (let oi = 0; oi < obstacles.length; oi++) {
+            const o = obstacles[oi];
+            if (!o.checkCollisions) continue;
+            const bb = o.getBoundingInfo().boundingBox;
+            const min = bb.minimumWorld;
+            const max = bb.maximumWorld;
+            const p = b.mesh.position;
+            if (p.x > min.x && p.x < max.x && p.y > min.y && p.y < max.y && p.z > min.z && p.z < max.z) {
+              wallHit = true;
+              break;
+            }
+          }
+        }
+        if (wallHit) {
+          spawnFlash(b.mesh.position.clone(), new BABYLON.Color3(1, 0.85, 0.4), 0.28, 0.09);
+          spawnSparks(b.mesh.position.clone(), 3);
+          sfxImpact();
+          b.mesh.material.dispose();
+          b.mesh.dispose();
+          bullets.splice(i, 1);
+        }
+      }
+
+      // Enemy feedback (flinch / collapse) — before AI so dead ones are skipped
+      for (const e of enemies) {
+        updateEnemyFeedback(e, dt);
+      }
+
+      // Camera hit-flash recovery
+      for (let ci = 0; ci < cameras.length; ci++) {
+        const cam = cameras[ci];
+        if (cam.alive && cam.hitFlashTimer > 0) {
+          cam.hitFlashTimer -= dt;
+          if (cam.hitFlashTimer <= 0) {
+            cam.body.material = camBodyMat;
+            cam.lite.scaling.setAll(1);
+          }
+        }
+      }
+
+      updateFx(dt);
+      updateEnemies(dt);
+
+      // Scan
+      if (scanActive) {
+        scanTimer -= dt;
+        if (scanTimer <= 0) {
+          scanActive = false;
+          enemies.forEach(e => {
+            if (e.alive) {
+              e.body.material = enemyMat;
+              e.head.material = enemyMat;
+            }
+          });
+        }
+      }
+      if (scanCooldown > 0) {
+        scanCooldown -= dt;
+        scanBtn.classList.add('cooldown');
+        scanBtn.querySelector('#scanLabel').textContent = Math.ceil(scanCooldown) + 's';
+        if (scanCooldown <= 0) {
+          scanBtn.classList.remove('cooldown', 'active');
+          scanBtn.querySelector('#scanLabel').textContent = 'SCAN';
+        }
+      }
+    });
+
+    // ========== VIEWPORT / ORIENTATION (iOS Safari) ==========
+    // Cause of prior failure: layout used static viewport units and optional inline
+    // pixel sizes that did not reliably update after rotate. iOS Safari also cannot
+    // lock orientation for normal tabs — the page must follow the visual viewport.
+    //
+    // Fix: drive #gameShell size from CSS variables updated from visualViewport
+    // on every resize/orientationchange, then call engine.resize() without
+    // rebuilding the scene. body.efe-landscape / efe-portrait toggles HUD CSS.
+    const rotateOverlay = document.getElementById('rotateOverlay');
+    const orientTitle = document.getElementById('orientTitle');
+    const orientMsg = document.getElementById('orientMsg');
+    const initErrorEl = document.getElementById('initError');
+    const gameShell = document.getElementById('gameShell');
+    let resizeTimer = null;
+
+    function showInitError(msg) {
+      if (!initErrorEl) return;
+      initErrorEl.textContent = 'INIT: ' + msg;
+      initErrorEl.classList.add('show');
+      console.error('[EFE]', msg);
+    }
+
+    function getViewportSize() {
+      var vv = window.visualViewport;
+      var w = Math.round((vv && vv.width) || window.innerWidth || document.documentElement.clientWidth || 0);
+      var h = Math.round((vv && vv.height) || window.innerHeight || document.documentElement.clientHeight || 0);
+      return { w: w, h: h };
+    }
+
+    // Physical device orientation (may disagree with viewport if OS portrait-lock is on)
+    function physicalIsLandscape() {
+      try {
+        if (typeof window.orientation === 'number') {
+          return Math.abs(window.orientation) === 90;
+        }
+        if (screen.orientation && typeof screen.orientation.angle === 'number') {
+          return Math.abs(screen.orientation.angle) === 90;
+        }
+      } catch (e) {}
+      return false;
+    }
+
+    function applyViewportLayout() {
+      var s = getViewportSize();
+      if (s.w < 16 || s.h < 16) return s;
+
+      // CSS variables drive the full-screen shell (works across orientation changes)
+      document.documentElement.style.setProperty('--efe-w', s.w + 'px');
+      document.documentElement.style.setProperty('--efe-h', s.h + 'px');
+
+      var landscape = s.w >= s.h;
+      document.body.classList.toggle('efe-landscape', landscape);
+      document.body.classList.toggle('efe-portrait', !landscape);
+
+      // Resize Babylon to the shell's client box (no scene rebuild)
+      if (engine) {
+        var dpr = window.devicePixelRatio || 1;
+        engine.setHardwareScalingLevel(dpr / Math.min(dpr, 1.5));
+        engine.resize();
+      }
+
+      // Soft tips
+      if (rotateOverlay) {
+        var touch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+        var lockedMismatch = touch && physicalIsLandscape() && !landscape;
+        if (lockedMismatch) {
+          // Phone is sideways but Safari viewport stayed portrait → OS orientation lock
+          if (orientTitle) orientTitle.textContent = 'ORIENTATION LOCKED';
+          if (orientMsg) orientMsg.textContent = 'Turn OFF the Portrait Lock in Control Center (lock icon), then rotate your phone again.';
+          rotateOverlay.classList.add('show');
+        } else if (touch && !landscape) {
+          if (orientTitle) orientTitle.textContent = 'LANDSCAPE RECOMMENDED';
+          if (orientMsg) orientMsg.textContent = 'Turn your phone sideways for the best controls. Gameplay works in portrait too.';
+          rotateOverlay.classList.add('show');
+        } else {
+          rotateOverlay.classList.remove('show');
+        }
+      }
+
+      // Temporary size readout (confirms reflow after rotate)
+      if (initErrorEl) {
+        initErrorEl.textContent = (landscape ? 'LANDSCAPE' : 'PORTRAIT') + ' ' + s.w + 'x' + s.h;
+        initErrorEl.classList.add('show');
+        initErrorEl.style.background = landscape ? 'rgba(20,50,30,0.9)' : 'rgba(40,40,20,0.9)';
+        initErrorEl.style.borderColor = landscape ? '#3a6a4a' : '#6a6a3a';
+        initErrorEl.style.color = '#cfc';
+      }
+      return s;
+    }
+
+    function doResize() {
+      try {
+        applyViewportLayout();
+      } catch (err) {
+        showInitError('resize failed: ' + (err && err.message ? err.message : err));
+      }
+    }
+
+    function scheduleResize() {
+      if (resizeTimer) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(function () {
+        resizeTimer = null;
+        doResize();
+      }, 16);
+    }
+
+    window.addEventListener('resize', scheduleResize);
+    window.addEventListener('orientationchange', function () {
+      doResize();
+      setTimeout(doResize, 50);
+      setTimeout(doResize, 150);
+      setTimeout(doResize, 400);
+      setTimeout(doResize, 800);
+    });
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', scheduleResize);
+      window.visualViewport.addEventListener('scroll', scheduleResize);
+    }
+    try {
+      if (screen.orientation && screen.orientation.addEventListener) {
+        screen.orientation.addEventListener('change', scheduleResize);
+      }
+    } catch (e) {}
+    try {
+      var mql = window.matchMedia('(orientation: landscape)');
+      var onMql = function () { scheduleResize(); };
+      if (mql.addEventListener) mql.addEventListener('change', onMql);
+      else if (mql.addListener) mql.addListener(onMql);
+    } catch (e) {}
+
+    // Joystick touches already use clientX/clientY (viewport space). After --efe-w/h
+    // update, zone boxes are percentage of the shell, so mapping stays correct.
+
+    try {
+      document.addEventListener('gesturestart', function (e) { e.preventDefault(); }, { passive: false });
+      document.addEventListener('gesturechange', function (e) { e.preventDefault(); }, { passive: false });
+    } catch (e) {}
+
+    try {
+      updateMissionHud();
+      updateHealthUI();
+      doResize();
+      setTimeout(doResize, 100);
+      setTimeout(doResize, 400);
+      showMsg('MISSION: FIRST SIGNAL\nOBJECTIVE: DISABLE R.E.D. SURVEILLANCE', 2.8);
+      engine.runRenderLoop(function () {
+        try { scene.render(); } catch (err) {}
+      });
+    } catch (err) {
+      showInitError('startup failed: ' + (err && err.message ? err.message : err));
+    }
+  })();
+  </script>
+</body>
+</html>
