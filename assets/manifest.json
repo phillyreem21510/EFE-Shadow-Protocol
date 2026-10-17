@@ -1,0 +1,8 @@
+{
+  "assets": {
+    "facade_north": {
+      "path": "assets/facade_north.glb",
+      "type": "model/gltf-binary"
+    }
+  }
+}
